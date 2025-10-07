@@ -1,0 +1,97 @@
+
+            <!DOCTYPE html>
+            <html>
+            <head>
+                <meta charset="utf-8" />
+                <meta name="viewport" content="width=device-width, initial-scale=1" />
+                <title>时段收益显著性检验</title>
+                <script src="https://cdn.plot.ly/plotly-latest.min.js"></script>
+                <style>
+                    body { font-family: Arial, sans-serif; margin: 20px; }
+                    h1 { margin: 0 0 15px 0; font-size: 22px; }
+                    .card { background: #fff; padding: 16px; border-radius: 10px; box-shadow: 0 2px 8px rgba(0,0,0,0.06); }
+                    .chart-container { margin-bottom: 20px; }
+                    .metrics-section { margin-top: 15px; }
+                    .explain { margin-top: 14px; color: #444; line-height: 1.7; }
+                    table td, table th { border-bottom: 1px solid #eee; padding: 8px; }
+                </style>
+                <script>
+                    window.MathJax = {
+                        tex: {
+                            inlineMath: [["$","$"],["\(","\)"]],
+                            displayMath: [["$$","$$"],["\[","\]"]],
+                            processEscapes: true
+                        },
+                        options: { skipHtmlTags: ["script","noscript","style","textarea","pre","code"] },
+                        svg: { fontCache: 'global' }
+                    };
+                </script>
+                <script id="MathJax-script" async src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-chtml-full.js" onerror="this.onerror=null; this.src='../assets/mathjax/tex-chtml-full.js';"></script>
+            </head>
+            <body>
+                <div class="card" id="page-root"> 
+                    <h1>时段收益显著性检验</h1>
+                    <div class="chart-container">
+                        
+            <div id="time_slot_significance_test_light" class="plotly-graph-div" style="height:420px; width:100%;"></div>
+            <script type="text/javascript">
+                window.PLOTLYENV=window.PLOTLYENV || {};
+                (function() {
+                    var fig = {"data": [{"marker": {"color": "#8e44ad"}, "name": "t统计", "x": ["09:30", "09:35", "09:40", "09:45", "09:50", "09:55", "10:00", "10:05", "10:10", "10:15", "10:20", "10:25", "10:30", "10:35", "10:40", "10:45", "10:50", "10:55", "11:00", "11:05", "11:10", "11:15", "11:20", "11:25", "11:30", "13:00", "13:05", "13:10", "13:15", "13:20", "13:25", "13:30", "13:35", "13:40", "13:45", "13:50", "13:55", "14:00", "14:05", "14:10", "14:15", "14:20", "14:25", "14:30", "14:35", "14:40", "14:45", "14:50", "14:55", "15:00"], "y": [219.52518732682404, 110.03736985192126, 61.90923357012315, 49.050537797956515, 43.598406369814086, 41.27102561009623, 24.086530106683114, 19.92829039447936, 18.178608623145713, 16.89665222155178, 22.658926402414227, 17.06734751098405, 22.49537030378553, 18.10609815843271, 16.737482704246847, 20.53781039675141, 18.574239836964942, 16.99425801007345, 21.988997609685097, 14.079406400388498, 19.32984479569665, 17.501407755698818, 16.486275028411686, 16.43882138013919, 0, 30.99233554629436, 20.755477823524075, 17.22976957892622, 13.534510686547524, 10.21939976581246, 7.615717947703366, 9.365374984899242, 6.838190019970434, 11.751776128875681, 8.706064741898938, 3.1118354706461053, 4.574430202514809, -0.4803032001501014, -2.0078382464510525, -6.476226282534831, -4.334733413569585, -4.954435399648218, -4.939663896411775, -2.4433976166745603, -3.7242874056335054, -3.2726585951449794, -1.8341071589957798, 0.10920208444330445, 9.26486696357133, 0], "type": "bar", "text": ["219.53", "110.04", "61.91", "49.05", "43.60", "41.27", "24.09", "19.93", "18.18", "16.90", "22.66", "17.07", "22.50", "18.11", "16.74", "20.54", "18.57", "16.99", "21.99", "14.08", "19.33", "17.50", "16.49", "16.44", "0.00", "30.99", "20.76", "17.23", "13.53", "10.22", "7.62", "9.37", "6.84", "11.75", "8.71", "3.11", "4.57", "-0.48", "-2.01", "-6.48", "-4.33", "-4.95", "-4.94", "-2.44", "-3.72", "-3.27", "-1.83", "0.11", "9.26", "0.00"], "textposition": "outside"}], "layout": {"template": {"data": {"histogram2dcontour": [{"type": "histogram2dcontour", "colorbar": {"outlinewidth": 0, "ticks": ""}, "colorscale": [[0.0, "#0d0887"], [0.1111111111111111, "#46039f"], [0.2222222222222222, "#7201a8"], [0.3333333333333333, "#9c179e"], [0.4444444444444444, "#bd3786"], [0.5555555555555556, "#d8576b"], [0.6666666666666666, "#ed7953"], [0.7777777777777778, "#fb9f3a"], [0.8888888888888888, "#fdca26"], [1.0, "#f0f921"]]}], "choropleth": [{"type": "choropleth", "colorbar": {"outlinewidth": 0, "ticks": ""}}], "histogram2d": [{"type": "histogram2d", "colorbar": {"outlinewidth": 0, "ticks": ""}, "colorscale": [[0.0, "#0d0887"], [0.1111111111111111, "#46039f"], [0.2222222222222222, "#7201a8"], [0.3333333333333333, "#9c179e"], [0.4444444444444444, "#bd3786"], [0.5555555555555556, "#d8576b"], [0.6666666666666666, "#ed7953"], [0.7777777777777778, "#fb9f3a"], [0.8888888888888888, "#fdca26"], [1.0, "#f0f921"]]}], "heatmap": [{"type": "heatmap", "colorbar": {"outlinewidth": 0, "ticks": ""}, "colorscale": [[0.0, "#0d0887"], [0.1111111111111111, "#46039f"], [0.2222222222222222, "#7201a8"], [0.3333333333333333, "#9c179e"], [0.4444444444444444, "#bd3786"], [0.5555555555555556, "#d8576b"], [0.6666666666666666, "#ed7953"], [0.7777777777777778, "#fb9f3a"], [0.8888888888888888, "#fdca26"], [1.0, "#f0f921"]]}], "contourcarpet": [{"type": "contourcarpet", "colorbar": {"outlinewidth": 0, "ticks": ""}}], "contour": [{"type": "contour", "colorbar": {"outlinewidth": 0, "ticks": ""}, "colorscale": [[0.0, "#0d0887"], [0.1111111111111111, "#46039f"], [0.2222222222222222, "#7201a8"], [0.3333333333333333, "#9c179e"], [0.4444444444444444, "#bd3786"], [0.5555555555555556, "#d8576b"], [0.6666666666666666, "#ed7953"], [0.7777777777777778, "#fb9f3a"], [0.8888888888888888, "#fdca26"], [1.0, "#f0f921"]]}], "surface": [{"type": "surface", "colorbar": {"outlinewidth": 0, "ticks": ""}, "colorscale": [[0.0, "#0d0887"], [0.1111111111111111, "#46039f"], [0.2222222222222222, "#7201a8"], [0.3333333333333333, "#9c179e"], [0.4444444444444444, "#bd3786"], [0.5555555555555556, "#d8576b"], [0.6666666666666666, "#ed7953"], [0.7777777777777778, "#fb9f3a"], [0.8888888888888888, "#fdca26"], [1.0, "#f0f921"]]}], "mesh3d": [{"type": "mesh3d", "colorbar": {"outlinewidth": 0, "ticks": ""}}], "scatter": [{"fillpattern": {"fillmode": "overlay", "size": 10, "solidity": 0.2}, "type": "scatter"}], "parcoords": [{"type": "parcoords", "line": {"colorbar": {"outlinewidth": 0, "ticks": ""}}}], "scatterpolargl": [{"type": "scatterpolargl", "marker": {"colorbar": {"outlinewidth": 0, "ticks": ""}}}], "bar": [{"error_x": {"color": "#2a3f5f"}, "error_y": {"color": "#2a3f5f"}, "marker": {"line": {"color": "#E5ECF6", "width": 0.5}, "pattern": {"fillmode": "overlay", "size": 10, "solidity": 0.2}}, "type": "bar"}], "scattergeo": [{"type": "scattergeo", "marker": {"colorbar": {"outlinewidth": 0, "ticks": ""}}}], "scatterpolar": [{"type": "scatterpolar", "marker": {"colorbar": {"outlinewidth": 0, "ticks": ""}}}], "histogram": [{"marker": {"pattern": {"fillmode": "overlay", "size": 10, "solidity": 0.2}}, "type": "histogram"}], "scattergl": [{"type": "scattergl", "marker": {"colorbar": {"outlinewidth": 0, "ticks": ""}}}], "scatter3d": [{"type": "scatter3d", "line": {"colorbar": {"outlinewidth": 0, "ticks": ""}}, "marker": {"colorbar": {"outlinewidth": 0, "ticks": ""}}}], "scattermap": [{"type": "scattermap", "marker": {"colorbar": {"outlinewidth": 0, "ticks": ""}}}], "scattermapbox": [{"type": "scattermapbox", "marker": {"colorbar": {"outlinewidth": 0, "ticks": ""}}}], "scatterternary": [{"type": "scatterternary", "marker": {"colorbar": {"outlinewidth": 0, "ticks": ""}}}], "scattercarpet": [{"type": "scattercarpet", "marker": {"colorbar": {"outlinewidth": 0, "ticks": ""}}}], "carpet": [{"aaxis": {"endlinecolor": "#2a3f5f", "gridcolor": "white", "linecolor": "white", "minorgridcolor": "white", "startlinecolor": "#2a3f5f"}, "baxis": {"endlinecolor": "#2a3f5f", "gridcolor": "white", "linecolor": "white", "minorgridcolor": "white", "startlinecolor": "#2a3f5f"}, "type": "carpet"}], "table": [{"cells": {"fill": {"color": "#EBF0F8"}, "line": {"color": "white"}}, "header": {"fill": {"color": "#C8D4E3"}, "line": {"color": "white"}}, "type": "table"}], "barpolar": [{"marker": {"line": {"color": "#E5ECF6", "width": 0.5}, "pattern": {"fillmode": "overlay", "size": 10, "solidity": 0.2}}, "type": "barpolar"}], "pie": [{"automargin": true, "type": "pie"}]}, "layout": {"autotypenumbers": "strict", "colorway": ["#636efa", "#EF553B", "#00cc96", "#ab63fa", "#FFA15A", "#19d3f3", "#FF6692", "#B6E880", "#FF97FF", "#FECB52"], "font": {"color": "#2a3f5f"}, "hovermode": "closest", "hoverlabel": {"align": "left"}, "paper_bgcolor": "white", "plot_bgcolor": "#E5ECF6", "polar": {"bgcolor": "#E5ECF6", "angularaxis": {"gridcolor": "white", "linecolor": "white", "ticks": ""}, "radialaxis": {"gridcolor": "white", "linecolor": "white", "ticks": ""}}, "ternary": {"bgcolor": "#E5ECF6", "aaxis": {"gridcolor": "white", "linecolor": "white", "ticks": ""}, "baxis": {"gridcolor": "white", "linecolor": "white", "ticks": ""}, "caxis": {"gridcolor": "white", "linecolor": "white", "ticks": ""}}, "coloraxis": {"colorbar": {"outlinewidth": 0, "ticks": ""}}, "colorscale": {"sequential": [[0.0, "#0d0887"], [0.1111111111111111, "#46039f"], [0.2222222222222222, "#7201a8"], [0.3333333333333333, "#9c179e"], [0.4444444444444444, "#bd3786"], [0.5555555555555556, "#d8576b"], [0.6666666666666666, "#ed7953"], [0.7777777777777778, "#fb9f3a"], [0.8888888888888888, "#fdca26"], [1.0, "#f0f921"]], "sequentialminus": [[0.0, "#0d0887"], [0.1111111111111111, "#46039f"], [0.2222222222222222, "#7201a8"], [0.3333333333333333, "#9c179e"], [0.4444444444444444, "#bd3786"], [0.5555555555555556, "#d8576b"], [0.6666666666666666, "#ed7953"], [0.7777777777777778, "#fb9f3a"], [0.8888888888888888, "#fdca26"], [1.0, "#f0f921"]], "diverging": [[0, "#8e0152"], [0.1, "#c51b7d"], [0.2, "#de77ae"], [0.3, "#f1b6da"], [0.4, "#fde0ef"], [0.5, "#f7f7f7"], [0.6, "#e6f5d0"], [0.7, "#b8e186"], [0.8, "#7fbc41"], [0.9, "#4d9221"], [1, "#276419"]]}, "xaxis": {"gridcolor": "white", "linecolor": "white", "ticks": "", "title": {"standoff": 15}, "zerolinecolor": "white", "automargin": true, "zerolinewidth": 2}, "yaxis": {"gridcolor": "white", "linecolor": "white", "ticks": "", "title": {"standoff": 15}, "zerolinecolor": "white", "automargin": true, "zerolinewidth": 2}, "scene": {"xaxis": {"backgroundcolor": "#E5ECF6", "gridcolor": "white", "linecolor": "white", "showbackground": true, "ticks": "", "zerolinecolor": "white", "gridwidth": 2}, "yaxis": {"backgroundcolor": "#E5ECF6", "gridcolor": "white", "linecolor": "white", "showbackground": true, "ticks": "", "zerolinecolor": "white", "gridwidth": 2}, "zaxis": {"backgroundcolor": "#E5ECF6", "gridcolor": "white", "linecolor": "white", "showbackground": true, "ticks": "", "zerolinecolor": "white", "gridwidth": 2}}, "shapedefaults": {"line": {"color": "#2a3f5f"}}, "annotationdefaults": {"arrowcolor": "#2a3f5f", "arrowhead": 0, "arrowwidth": 1}, "geo": {"bgcolor": "white", "landcolor": "#E5ECF6", "subunitcolor": "white", "showland": true, "showlakes": true, "lakecolor": "white"}, "title": {"x": 0.05}, "mapbox": {"style": "light"}}}, "shapes": [{"line": {"color": "tomato", "dash": "dot"}, "type": "line", "x0": 0, "x1": 1, "xref": "x domain", "y0": 1.96, "y1": 1.96, "yref": "y"}, {"line": {"color": "tomato", "dash": "dot"}, "type": "line", "x0": 0, "x1": 1, "xref": "x domain", "y0": -1.96, "y1": -1.96, "yref": "y"}], "title": {"text": "时段收益显著性检验（t统计）"}, "xaxis": {"title": {"text": "时段(5分钟)"}}, "yaxis": {"title": {"text": "t 值"}}, "height": 420}};
+                    var cfg = {"displayModeBar": false, "displaylogo": false, "modeBarButtonsToRemove": ["pan2d", "lasso2d"]};
+                    if (document.getElementById("time_slot_significance_test_light")) {
+                        Plotly.newPlot("time_slot_significance_test_light", fig.data || [], fig.layout || {}, cfg);
+                    }
+                })();
+            </script>
+            
+                    </div>
+                    <div class="metrics-section">
+                        
+                    </div>
+                    <div class="explain"><p>每个 5 分钟时段按收益率计算 t 值；虚线为 |t|=1.96 阈值（约 5% 显著）。</p></div>
+                </div>
+                <script>
+                    (function ensureMathJax() {
+                        var rootEl = document.getElementById('page-root') || document.body;
+                        function typeset() {
+                            if (window.MathJax) {
+                                if (window.MathJax.typesetPromise) {
+                                    window.MathJax.typesetPromise([rootEl]).catch(function (err) {
+                                        if (window.console && window.console.warn) {
+                                            console.warn('MathJax typeset failed:', err);
+                                        }
+                                    });
+                                } else if (window.MathJax.Hub && window.MathJax.Hub.Queue) {
+                                    window.MathJax.Hub.Queue(['Typeset', window.MathJax.Hub, rootEl]);
+                                }
+                            }
+                        }
+                        if (document.readyState === 'loading') {
+                            document.addEventListener('DOMContentLoaded', typeset);
+                        } else {
+                            typeset();
+                        }
+                        window.addEventListener('load', typeset);
+                        var mjScript = document.getElementById('MathJax-script');
+                        if (mjScript && !mjScript.hasAttribute('data-mathjax-listener')) {
+                            mjScript.addEventListener('load', typeset);
+                            mjScript.setAttribute('data-mathjax-listener', 'true');
+                        }
+                        if (!window.MathJax) {
+                            var attempts = 0;
+                            var timer = setInterval(function () {
+                                attempts += 1;
+                                if (window.MathJax) {
+                                    clearInterval(timer);
+                                    typeset();
+                                } else if (attempts > 20) {
+                                    clearInterval(timer);
+                                }
+                            }, 250);
+                        }
+                    })();
+                </script>
+            </body>
+            </html>
+            

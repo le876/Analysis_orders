@@ -1,0 +1,97 @@
+
+            <!DOCTYPE html>
+            <html>
+            <head>
+                <meta charset="utf-8" />
+                <meta name="viewport" content="width=device-width, initial-scale=1" />
+                <title>时段风险-收益气泡图</title>
+                <script src="https://cdn.plot.ly/plotly-latest.min.js"></script>
+                <style>
+                    body { font-family: Arial, sans-serif; margin: 20px; }
+                    h1 { margin: 0 0 15px 0; font-size: 22px; }
+                    .card { background: #fff; padding: 16px; border-radius: 10px; box-shadow: 0 2px 8px rgba(0,0,0,0.06); }
+                    .chart-container { margin-bottom: 20px; }
+                    .metrics-section { margin-top: 15px; }
+                    .explain { margin-top: 14px; color: #444; line-height: 1.7; }
+                    table td, table th { border-bottom: 1px solid #eee; padding: 8px; }
+                </style>
+                <script>
+                    window.MathJax = {
+                        tex: {
+                            inlineMath: [["$","$"],["\(","\)"]],
+                            displayMath: [["$$","$$"],["\[","\]"]],
+                            processEscapes: true
+                        },
+                        options: { skipHtmlTags: ["script","noscript","style","textarea","pre","code"] },
+                        svg: { fontCache: 'global' }
+                    };
+                </script>
+                <script id="MathJax-script" async src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-chtml-full.js" onerror="this.onerror=null; this.src='../assets/mathjax/tex-chtml-full.js';"></script>
+            </head>
+            <body>
+                <div class="card" id="page-root"> 
+                    <h1>时段风险-收益气泡图</h1>
+                    <div class="chart-container">
+                        
+            <div id="time_slot_risk_return_bubble_light" class="plotly-graph-div" style="height:480px; width:100%;"></div>
+            <script type="text/javascript">
+                window.PLOTLYENV=window.PLOTLYENV || {};
+                (function() {
+                    var fig = {"data": [{"marker": {"color": [0.0051486944099175145, 0.00165880905120828, 0.001133812260876147, 0.0006810008287990409, 0.0007466240370294235, 0.000892455892432231, 0.0005296384238057026, 0.000576681806808382, 0.000566432303575238, 0.000623848396832488, 0.0009182185432894825, 0.0007680466931164762, 0.0009878140169778558, 0.0009926240008096398, 0.0008665226741882358, 0.0010935316933781284, 0.0010145498242104384, 0.0010243931352997627, 0.0013138988456792287, 0.0009170900728989637, 0.0013544347157542558, 0.0011702654932782416, 0.0013025246367278879, 0.0011668527365724774, 0.0, 0.0016878256252417648, 0.0014302676190786332, 0.0012559522669916311, 0.0010112743562040963, 0.0008217584635205178, 0.0006626995198798504, 0.0007080344035029684, 0.0006712692599310407, 0.0010344672807605791, 0.0007770824726301234, 0.0002920707468520255, 0.00043481222531465053, -2.9253120297331567e-05, -0.00014788944718241225, -0.00048511414655149265, -0.0003778502894040768, -0.0004947247136951248, -0.00046317881719738644, -0.00021556246096568176, -0.0002587668261400916, -0.000180411840943757, -0.00010421355928955739, 8.331857081591885e-06, 0.001042986251019805, 0.0], "colorscale": [[0.0, "rgb(103,0,31)"], [0.1, "rgb(178,24,43)"], [0.2, "rgb(214,96,77)"], [0.3, "rgb(244,165,130)"], [0.4, "rgb(253,219,199)"], [0.5, "rgb(247,247,247)"], [0.6, "rgb(209,229,240)"], [0.7, "rgb(146,197,222)"], [0.8, "rgb(67,147,195)"], [0.9, "rgb(33,102,172)"], [1.0, "rgb(5,48,97)"]], "showscale": true, "size": [45.0, 39.65318088968691, 35.69650557531172, 36.49512688065676, 29.757597375982886, 25.240346979582412, 25.239360701840358, 21.050777457339557, 19.241954206133528, 17.91664613193927, 16.656693497509643, 15.60451228000889, 15.748903221155526, 14.797014324425932, 14.159142469437857, 14.059533808919802, 13.65404067857696, 12.961594157183557, 13.140118329695841, 12.806220936152481, 12.352991735429534, 12.303091678958566, 12.010343655389583, 11.945195062665329, 5.0, 15.816140534970252, 12.660257913807094, 12.164739501398715, 11.874943611427204, 11.293237705144808, 10.96198557869435, 11.450028471715918, 10.899102876456231, 10.771754011888005, 10.825738490802477, 10.59420734187696, 10.330247386046612, 12.717375491010259, 11.543325777477344, 11.306920081767622, 10.874132038067692, 10.722653307186274, 10.280134371385868, 11.067136423807149, 11.858161411184511, 13.309789008990426, 13.632940272029249, 12.68509247007146, 10.30191387126704, 5.0]}, "mode": "markers+text", "text": ["09:30", "09:35", "09:40", "09:45", "09:50", "09:55", "10:00", "10:05", "10:10", "10:15", "10:20", "10:25", "10:30", "10:35", "10:40", "10:45", "10:50", "10:55", "11:00", "11:05", "11:10", "11:15", "11:20", "11:25", "11:30", "13:00", "13:05", "13:10", "13:15", "13:20", "13:25", "13:30", "13:35", "13:40", "13:45", "13:50", "13:55", "14:00", "14:05", "14:10", "14:15", "14:20", "14:25", "14:30", "14:35", "14:40", "14:45", "14:50", "14:55", "15:00"], "textposition": "top center", "x": [0.022022458046776695, 0.01226287612697609, 0.013196771625536162, 0.01026455839589422, 0.00995251610333983, 0.010274305939174366, 0.010447083719827546, 0.01090323370802098, 0.010417175935935875, 0.011194925307291053, 0.011088559927191386, 0.011202251845437782, 0.011079986493646901, 0.012608014072727339, 0.011131088738787643, 0.011323381118325341, 0.011096200709129055, 0.011265683036922257, 0.011417742849412, 0.011936074661296123, 0.01209446962253463, 0.011463340938720881, 0.013001568683047889, 0.011572384656992432, 0.0, 0.01382733971122278, 0.01239141788044572, 0.012259905140987007, 0.012058370290822648, 0.011879166618257294, 0.012178386873635823, 0.011446793858340678, 0.013593603720867535, 0.01192652995462494, 0.012206446368617245, 0.01232545707922515, 0.011893375951865123, 0.011033654707220468, 0.011313579858238143, 0.011090019069156742, 0.012019713346989628, 0.013414049736897925, 0.011622225695418344, 0.012564806017018617, 0.011185776909893717, 0.01075343894319764, 0.011514664792926161, 0.013764264875986055, 0.014010870041540502, 0.0], "y": [0.0051486944099175145, 0.00165880905120828, 0.001133812260876147, 0.0006810008287990409, 0.0007466240370294235, 0.000892455892432231, 0.0005296384238057026, 0.000576681806808382, 0.000566432303575238, 0.000623848396832488, 0.0009182185432894825, 0.0007680466931164762, 0.0009878140169778558, 0.0009926240008096398, 0.0008665226741882358, 0.0010935316933781284, 0.0010145498242104384, 0.0010243931352997627, 0.0013138988456792287, 0.0009170900728989637, 0.0013544347157542558, 0.0011702654932782416, 0.0013025246367278879, 0.0011668527365724774, 0.0, 0.0016878256252417648, 0.0014302676190786332, 0.0012559522669916311, 0.0010112743562040963, 0.0008217584635205178, 0.0006626995198798504, 0.0007080344035029684, 0.0006712692599310407, 0.0010344672807605791, 0.0007770824726301234, 0.0002920707468520255, 0.00043481222531465053, -2.9253120297331567e-05, -0.00014788944718241225, -0.00048511414655149265, -0.0003778502894040768, -0.0004947247136951248, -0.00046317881719738644, -0.00021556246096568176, -0.0002587668261400916, -0.000180411840943757, -0.00010421355928955739, 8.331857081591885e-06, 0.001042986251019805, 0.0], "type": "scatter"}], "layout": {"template": {"data": {"histogram2dcontour": [{"type": "histogram2dcontour", "colorbar": {"outlinewidth": 0, "ticks": ""}, "colorscale": [[0.0, "#0d0887"], [0.1111111111111111, "#46039f"], [0.2222222222222222, "#7201a8"], [0.3333333333333333, "#9c179e"], [0.4444444444444444, "#bd3786"], [0.5555555555555556, "#d8576b"], [0.6666666666666666, "#ed7953"], [0.7777777777777778, "#fb9f3a"], [0.8888888888888888, "#fdca26"], [1.0, "#f0f921"]]}], "choropleth": [{"type": "choropleth", "colorbar": {"outlinewidth": 0, "ticks": ""}}], "histogram2d": [{"type": "histogram2d", "colorbar": {"outlinewidth": 0, "ticks": ""}, "colorscale": [[0.0, "#0d0887"], [0.1111111111111111, "#46039f"], [0.2222222222222222, "#7201a8"], [0.3333333333333333, "#9c179e"], [0.4444444444444444, "#bd3786"], [0.5555555555555556, "#d8576b"], [0.6666666666666666, "#ed7953"], [0.7777777777777778, "#fb9f3a"], [0.8888888888888888, "#fdca26"], [1.0, "#f0f921"]]}], "heatmap": [{"type": "heatmap", "colorbar": {"outlinewidth": 0, "ticks": ""}, "colorscale": [[0.0, "#0d0887"], [0.1111111111111111, "#46039f"], [0.2222222222222222, "#7201a8"], [0.3333333333333333, "#9c179e"], [0.4444444444444444, "#bd3786"], [0.5555555555555556, "#d8576b"], [0.6666666666666666, "#ed7953"], [0.7777777777777778, "#fb9f3a"], [0.8888888888888888, "#fdca26"], [1.0, "#f0f921"]]}], "contourcarpet": [{"type": "contourcarpet", "colorbar": {"outlinewidth": 0, "ticks": ""}}], "contour": [{"type": "contour", "colorbar": {"outlinewidth": 0, "ticks": ""}, "colorscale": [[0.0, "#0d0887"], [0.1111111111111111, "#46039f"], [0.2222222222222222, "#7201a8"], [0.3333333333333333, "#9c179e"], [0.4444444444444444, "#bd3786"], [0.5555555555555556, "#d8576b"], [0.6666666666666666, "#ed7953"], [0.7777777777777778, "#fb9f3a"], [0.8888888888888888, "#fdca26"], [1.0, "#f0f921"]]}], "surface": [{"type": "surface", "colorbar": {"outlinewidth": 0, "ticks": ""}, "colorscale": [[0.0, "#0d0887"], [0.1111111111111111, "#46039f"], [0.2222222222222222, "#7201a8"], [0.3333333333333333, "#9c179e"], [0.4444444444444444, "#bd3786"], [0.5555555555555556, "#d8576b"], [0.6666666666666666, "#ed7953"], [0.7777777777777778, "#fb9f3a"], [0.8888888888888888, "#fdca26"], [1.0, "#f0f921"]]}], "mesh3d": [{"type": "mesh3d", "colorbar": {"outlinewidth": 0, "ticks": ""}}], "scatter": [{"fillpattern": {"fillmode": "overlay", "size": 10, "solidity": 0.2}, "type": "scatter"}], "parcoords": [{"type": "parcoords", "line": {"colorbar": {"outlinewidth": 0, "ticks": ""}}}], "scatterpolargl": [{"type": "scatterpolargl", "marker": {"colorbar": {"outlinewidth": 0, "ticks": ""}}}], "bar": [{"error_x": {"color": "#2a3f5f"}, "error_y": {"color": "#2a3f5f"}, "marker": {"line": {"color": "#E5ECF6", "width": 0.5}, "pattern": {"fillmode": "overlay", "size": 10, "solidity": 0.2}}, "type": "bar"}], "scattergeo": [{"type": "scattergeo", "marker": {"colorbar": {"outlinewidth": 0, "ticks": ""}}}], "scatterpolar": [{"type": "scatterpolar", "marker": {"colorbar": {"outlinewidth": 0, "ticks": ""}}}], "histogram": [{"marker": {"pattern": {"fillmode": "overlay", "size": 10, "solidity": 0.2}}, "type": "histogram"}], "scattergl": [{"type": "scattergl", "marker": {"colorbar": {"outlinewidth": 0, "ticks": ""}}}], "scatter3d": [{"type": "scatter3d", "line": {"colorbar": {"outlinewidth": 0, "ticks": ""}}, "marker": {"colorbar": {"outlinewidth": 0, "ticks": ""}}}], "scattermap": [{"type": "scattermap", "marker": {"colorbar": {"outlinewidth": 0, "ticks": ""}}}], "scattermapbox": [{"type": "scattermapbox", "marker": {"colorbar": {"outlinewidth": 0, "ticks": ""}}}], "scatterternary": [{"type": "scatterternary", "marker": {"colorbar": {"outlinewidth": 0, "ticks": ""}}}], "scattercarpet": [{"type": "scattercarpet", "marker": {"colorbar": {"outlinewidth": 0, "ticks": ""}}}], "carpet": [{"aaxis": {"endlinecolor": "#2a3f5f", "gridcolor": "white", "linecolor": "white", "minorgridcolor": "white", "startlinecolor": "#2a3f5f"}, "baxis": {"endlinecolor": "#2a3f5f", "gridcolor": "white", "linecolor": "white", "minorgridcolor": "white", "startlinecolor": "#2a3f5f"}, "type": "carpet"}], "table": [{"cells": {"fill": {"color": "#EBF0F8"}, "line": {"color": "white"}}, "header": {"fill": {"color": "#C8D4E3"}, "line": {"color": "white"}}, "type": "table"}], "barpolar": [{"marker": {"line": {"color": "#E5ECF6", "width": 0.5}, "pattern": {"fillmode": "overlay", "size": 10, "solidity": 0.2}}, "type": "barpolar"}], "pie": [{"automargin": true, "type": "pie"}]}, "layout": {"autotypenumbers": "strict", "colorway": ["#636efa", "#EF553B", "#00cc96", "#ab63fa", "#FFA15A", "#19d3f3", "#FF6692", "#B6E880", "#FF97FF", "#FECB52"], "font": {"color": "#2a3f5f"}, "hovermode": "closest", "hoverlabel": {"align": "left"}, "paper_bgcolor": "white", "plot_bgcolor": "#E5ECF6", "polar": {"bgcolor": "#E5ECF6", "angularaxis": {"gridcolor": "white", "linecolor": "white", "ticks": ""}, "radialaxis": {"gridcolor": "white", "linecolor": "white", "ticks": ""}}, "ternary": {"bgcolor": "#E5ECF6", "aaxis": {"gridcolor": "white", "linecolor": "white", "ticks": ""}, "baxis": {"gridcolor": "white", "linecolor": "white", "ticks": ""}, "caxis": {"gridcolor": "white", "linecolor": "white", "ticks": ""}}, "coloraxis": {"colorbar": {"outlinewidth": 0, "ticks": ""}}, "colorscale": {"sequential": [[0.0, "#0d0887"], [0.1111111111111111, "#46039f"], [0.2222222222222222, "#7201a8"], [0.3333333333333333, "#9c179e"], [0.4444444444444444, "#bd3786"], [0.5555555555555556, "#d8576b"], [0.6666666666666666, "#ed7953"], [0.7777777777777778, "#fb9f3a"], [0.8888888888888888, "#fdca26"], [1.0, "#f0f921"]], "sequentialminus": [[0.0, "#0d0887"], [0.1111111111111111, "#46039f"], [0.2222222222222222, "#7201a8"], [0.3333333333333333, "#9c179e"], [0.4444444444444444, "#bd3786"], [0.5555555555555556, "#d8576b"], [0.6666666666666666, "#ed7953"], [0.7777777777777778, "#fb9f3a"], [0.8888888888888888, "#fdca26"], [1.0, "#f0f921"]], "diverging": [[0, "#8e0152"], [0.1, "#c51b7d"], [0.2, "#de77ae"], [0.3, "#f1b6da"], [0.4, "#fde0ef"], [0.5, "#f7f7f7"], [0.6, "#e6f5d0"], [0.7, "#b8e186"], [0.8, "#7fbc41"], [0.9, "#4d9221"], [1, "#276419"]]}, "xaxis": {"gridcolor": "white", "linecolor": "white", "ticks": "", "title": {"standoff": 15}, "zerolinecolor": "white", "automargin": true, "zerolinewidth": 2}, "yaxis": {"gridcolor": "white", "linecolor": "white", "ticks": "", "title": {"standoff": 15}, "zerolinecolor": "white", "automargin": true, "zerolinewidth": 2}, "scene": {"xaxis": {"backgroundcolor": "#E5ECF6", "gridcolor": "white", "linecolor": "white", "showbackground": true, "ticks": "", "zerolinecolor": "white", "gridwidth": 2}, "yaxis": {"backgroundcolor": "#E5ECF6", "gridcolor": "white", "linecolor": "white", "showbackground": true, "ticks": "", "zerolinecolor": "white", "gridwidth": 2}, "zaxis": {"backgroundcolor": "#E5ECF6", "gridcolor": "white", "linecolor": "white", "showbackground": true, "ticks": "", "zerolinecolor": "white", "gridwidth": 2}}, "shapedefaults": {"line": {"color": "#2a3f5f"}}, "annotationdefaults": {"arrowcolor": "#2a3f5f", "arrowhead": 0, "arrowwidth": 1}, "geo": {"bgcolor": "white", "landcolor": "#E5ECF6", "subunitcolor": "white", "showland": true, "showlakes": true, "lakecolor": "white"}, "title": {"x": 0.05}, "mapbox": {"style": "light"}}}, "title": {"text": "时段风险-收益气泡图"}, "xaxis": {"title": {"text": "收益率标准差"}}, "yaxis": {"title": {"text": "平均收益率"}}, "height": 480}};
+                    var cfg = {"displayModeBar": false, "displaylogo": false, "modeBarButtonsToRemove": ["pan2d", "lasso2d"]};
+                    if (document.getElementById("time_slot_risk_return_bubble_light")) {
+                        Plotly.newPlot("time_slot_risk_return_bubble_light", fig.data || [], fig.layout || {}, cfg);
+                    }
+                })();
+            </script>
+            
+                    </div>
+                    <div class="metrics-section">
+                        
+                    </div>
+                    <div class="explain"><p>每个时段的收益率均值与标准差，气泡大小代表样本数。</p></div>
+                </div>
+                <script>
+                    (function ensureMathJax() {
+                        var rootEl = document.getElementById('page-root') || document.body;
+                        function typeset() {
+                            if (window.MathJax) {
+                                if (window.MathJax.typesetPromise) {
+                                    window.MathJax.typesetPromise([rootEl]).catch(function (err) {
+                                        if (window.console && window.console.warn) {
+                                            console.warn('MathJax typeset failed:', err);
+                                        }
+                                    });
+                                } else if (window.MathJax.Hub && window.MathJax.Hub.Queue) {
+                                    window.MathJax.Hub.Queue(['Typeset', window.MathJax.Hub, rootEl]);
+                                }
+                            }
+                        }
+                        if (document.readyState === 'loading') {
+                            document.addEventListener('DOMContentLoaded', typeset);
+                        } else {
+                            typeset();
+                        }
+                        window.addEventListener('load', typeset);
+                        var mjScript = document.getElementById('MathJax-script');
+                        if (mjScript && !mjScript.hasAttribute('data-mathjax-listener')) {
+                            mjScript.addEventListener('load', typeset);
+                            mjScript.setAttribute('data-mathjax-listener', 'true');
+                        }
+                        if (!window.MathJax) {
+                            var attempts = 0;
+                            var timer = setInterval(function () {
+                                attempts += 1;
+                                if (window.MathJax) {
+                                    clearInterval(timer);
+                                    typeset();
+                                } else if (attempts > 20) {
+                                    clearInterval(timer);
+                                }
+                            }, 250);
+                        }
+                    })();
+                </script>
+            </body>
+            </html>
+            

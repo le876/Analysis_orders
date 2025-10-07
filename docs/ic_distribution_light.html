@@ -1,0 +1,126 @@
+
+            <!DOCTYPE html>
+            <html>
+            <head>
+                <meta charset="utf-8" />
+                <meta name="viewport" content="width=device-width, initial-scale=1" />
+                <title>IC分布分析（含数据质量诊断）</title>
+                <script src="https://cdn.plot.ly/plotly-latest.min.js"></script>
+                <style>
+                    body { font-family: Arial, sans-serif; margin: 20px; }
+                    h1 { margin: 0 0 15px 0; font-size: 22px; }
+                    .card { background: #fff; padding: 16px; border-radius: 10px; box-shadow: 0 2px 8px rgba(0,0,0,0.06); }
+                    .chart-container { margin-bottom: 20px; }
+                    .metrics-section { margin-top: 15px; }
+                    .explain { margin-top: 14px; color: #444; line-height: 1.7; }
+                    table td, table th { border-bottom: 1px solid #eee; padding: 8px; }
+                </style>
+                <script>
+                    window.MathJax = {
+                        tex: {
+                            inlineMath: [["$","$"],["\(","\)"]],
+                            displayMath: [["$$","$$"],["\[","\]"]],
+                            processEscapes: true
+                        },
+                        options: { skipHtmlTags: ["script","noscript","style","textarea","pre","code"] },
+                        svg: { fontCache: 'global' }
+                    };
+                </script>
+                <script id="MathJax-script" async src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-chtml-full.js" onerror="this.onerror=null; this.src='../assets/mathjax/tex-chtml-full.js';"></script>
+            </head>
+            <body>
+                <div class="card" id="page-root"> 
+                    <h1>IC分布分析（含数据质量诊断）</h1>
+                    <div class="chart-container">
+                        
+            <div id="ic_distribution_light" class="plotly-graph-div" style="height:520px; width:100%;"></div>
+            <script type="text/javascript">
+                window.PLOTLYENV=window.PLOTLYENV || {};
+                (function() {
+                    var fig = {"data": [{"hovertemplate": "IC区间: %{x:.4f}<br>频次: %{y}<extra></extra>", "marker": {"color": "lightcoral", "line": {"color": "darkred", "width": 1.0}}, "name": "IC分布", "nbinsx": 30, "opacity": 0.85, "x": [0.018230662083912157, -0.026454006898162935, 0.002301436354998029, 0.007332545418736007, -0.004766255624839671, -0.007131677396181072, 0.009513770422440341, -0.006989038159259346, 0.02107420345346915, -0.0682015159564045, -0.001113080285654077, 0.0004950407062755668, -0.07462051196876804, -0.009238739449393801, -0.017675333587256224, 0.004594653089432535, 0.022438627921440264, -0.031013056035017902, 0.06549259749227021, -0.009634216592814321, -0.02448306768446656, -0.0004014022913270509, -0.00864519081093012, 0.029914174692608844, -0.005276598796548031, -0.003786326148448531, -0.0004395319429128268, -0.015233881336216833, 0.01638957800219721, -0.08003380606280397, -0.0687634362377688, 0.016693294956473387, -0.022270593602196492, -0.04388652413219706, -0.016508395717613755, -0.059172309168677266, 0.02649355290556239, -0.029079771716214422, -0.029159426103829225, 0.010534584807652595, 0.001969108917392384, -0.002991876210170379, -0.010509372478583787, -0.015223452788608911, 0.003766932357519071, -0.04902874381439708, 0.034343536033181195, 0.029011443678195865, -0.013896299764412031, -0.008063983959365695, 0.03654611191125151, -0.005232268401427979, -0.021420313206770725, -0.04167579747597874, 0.015655960445863554, -0.01133941875958731, 0.00351946236000353, -0.042282127978346955, -0.04144372975376371, 0.01399377773674433, 0.03061475176377137, -0.009396344205020566, 0.04897452782368211, -0.06424062769333838, -0.011432815353523139, 0.022987011579322095, 0.07631839465532213, 0.004295288423619762, -0.028587672912557198, -0.02699498822046313, 0.005579942777426621, -0.00965617964585356, 0.004340279351372573, -0.031931557593672534, -0.043917641105300276, -0.04666843490678171, 0.012238230954045179, -0.021280064834524482, -0.024209367253825113, -0.09569888739867936, -0.045095573447395225, -0.052837965455989844, 0.0005653656252629083, 0.003126247248731631, -0.01383186737175832, -0.059949763073521734, 0.03535805569047746, -0.07790983023286087, 0.04511726396236099, -0.09063795040676892, -0.026075909141174077, -0.012336850328580899, 0.00899474454826231, -0.049735127221700814, -0.04338078274907004, 0.010491865034780768, -0.08142505729784713, -0.04432144791205715, -0.0326845360092284, -0.036992624239104405, -0.0032750790465496827, -0.0680193993137416, 0.0009882169473426701, -0.07760651681650761, -0.04331619373520489, -0.011289670881279018, -0.03886873479434091, -0.017162970516020882, -0.04343260926054546, -0.010698051860875144, -0.02794028662045976, -0.06838885278960741, 0.053778079412593625, 0.027594266979597996, -0.05970673024115306, 0.0225121241575435, 0.023571373196409277, -0.04328571955254489, -0.02354154168262584, -0.006213756997862414, -0.04274166837528189, 0.013231298219900973, -0.06114041966880302, -0.030615392947701513, -0.026777081997857614, -0.034744770385257744, -0.052595115015714025, -0.024891725307395585, -0.031159168960662783, -0.03970239795518627, -0.033230624529171485, -0.04948048763998279, 0.020238153057341186, -0.037023890176556065, 0.016621488054337743, 0.003777805512930129, -0.054181741489784614, 0.014751704579685483, 0.01915865552428136, 0.026540538467160743, -0.016640981947033968, -0.037273893806266646, 0.01870875291682768, -0.016489185440881116, -0.0447738143518482, -0.028768961878206857, 0.0019281780517575531, 0.0016450680037391077, 0.023856571042886084, -0.02397191401295834, -0.004746493170602232, -0.04940069242235088, -0.04303335844078327, -0.02932597015523278, 0.010744829274928631, 0.015887068896373258, 0.010756988006153075, -0.06279268034923914, -0.10907584978559379, 0.03578574465253157, -0.005380172209181688, -0.05568495215936819, -0.009205642371697782, -0.00645080727075874, 0.03788529002397602, -0.03154182832748383, -0.04047523319629023, 0.02824536336627311, 0.005195987829046781, -0.0370855022165222, 0.020438486313766293, 0.02134377200359206, -0.029007733242377286, 0.026571587684988966, -0.0132972579831855, -0.02557990880574497, -0.009398431215418425, 0.019155346009997295, 0.010012510307400514, 0.04395489879133382, -0.013342807514094012, -0.00034026337237450476, 0.0931991282623807, -0.001334396195756, 0.045773326655042385, 0.011604977830101108, -0.017082825392995094, -0.015505843849283923, 0.052909268905044445, -0.03251439230149521, -0.06907323754630286, 0.0009072589316658315, 0.03033187059894554, -0.025618399327162658, -0.03427607618361787, -0.05348623118413133, 0.06338200873455768, -0.0038788516544759253, 0.002274933831063643, -0.010256785559801584, -0.07228203576172239, 0.026143061989859176, 0.005600181945296127, -0.04861892181977827, 0.05414256112736006, 0.007190604936709128, -0.026193523175820355, -0.018079988945947843, 0.00032549333483962217, -0.019010510310388563, 0.02666978315913888, -0.11019548102298628, 0.01724358879165824, -0.013084725361430743, 0.04440119125770446, -0.0024115761877855917, 0.03001264717565654, -0.05361026511850297, -1.1714901599091204e-05, -0.07990555135027556, 0.03626552074617304, 0.01892305650745572, -0.0292826605248454, 0.007097510907432815, -0.023148463195213142, -0.039588994629319314, -0.026101681096479624, 0.06261844808917327, -0.04891446614384356, -0.04309745798866132, 0.03484113165077417, 0.03982984479325538, 0.017447448976518218, -0.02205704683763118, 0.038400648627707326, 0.0697505877087618, 0.012900213036742325, -0.009282459218512975, 0.0005871416830306362, 0.009690510357036343, -0.02094107365286693], "type": "histogram"}], "layout": {"template": {"data": {"histogram2dcontour": [{"type": "histogram2dcontour", "colorbar": {"outlinewidth": 0, "ticks": ""}, "colorscale": [[0.0, "#0d0887"], [0.1111111111111111, "#46039f"], [0.2222222222222222, "#7201a8"], [0.3333333333333333, "#9c179e"], [0.4444444444444444, "#bd3786"], [0.5555555555555556, "#d8576b"], [0.6666666666666666, "#ed7953"], [0.7777777777777778, "#fb9f3a"], [0.8888888888888888, "#fdca26"], [1.0, "#f0f921"]]}], "choropleth": [{"type": "choropleth", "colorbar": {"outlinewidth": 0, "ticks": ""}}], "histogram2d": [{"type": "histogram2d", "colorbar": {"outlinewidth": 0, "ticks": ""}, "colorscale": [[0.0, "#0d0887"], [0.1111111111111111, "#46039f"], [0.2222222222222222, "#7201a8"], [0.3333333333333333, "#9c179e"], [0.4444444444444444, "#bd3786"], [0.5555555555555556, "#d8576b"], [0.6666666666666666, "#ed7953"], [0.7777777777777778, "#fb9f3a"], [0.8888888888888888, "#fdca26"], [1.0, "#f0f921"]]}], "heatmap": [{"type": "heatmap", "colorbar": {"outlinewidth": 0, "ticks": ""}, "colorscale": [[0.0, "#0d0887"], [0.1111111111111111, "#46039f"], [0.2222222222222222, "#7201a8"], [0.3333333333333333, "#9c179e"], [0.4444444444444444, "#bd3786"], [0.5555555555555556, "#d8576b"], [0.6666666666666666, "#ed7953"], [0.7777777777777778, "#fb9f3a"], [0.8888888888888888, "#fdca26"], [1.0, "#f0f921"]]}], "contourcarpet": [{"type": "contourcarpet", "colorbar": {"outlinewidth": 0, "ticks": ""}}], "contour": [{"type": "contour", "colorbar": {"outlinewidth": 0, "ticks": ""}, "colorscale": [[0.0, "#0d0887"], [0.1111111111111111, "#46039f"], [0.2222222222222222, "#7201a8"], [0.3333333333333333, "#9c179e"], [0.4444444444444444, "#bd3786"], [0.5555555555555556, "#d8576b"], [0.6666666666666666, "#ed7953"], [0.7777777777777778, "#fb9f3a"], [0.8888888888888888, "#fdca26"], [1.0, "#f0f921"]]}], "surface": [{"type": "surface", "colorbar": {"outlinewidth": 0, "ticks": ""}, "colorscale": [[0.0, "#0d0887"], [0.1111111111111111, "#46039f"], [0.2222222222222222, "#7201a8"], [0.3333333333333333, "#9c179e"], [0.4444444444444444, "#bd3786"], [0.5555555555555556, "#d8576b"], [0.6666666666666666, "#ed7953"], [0.7777777777777778, "#fb9f3a"], [0.8888888888888888, "#fdca26"], [1.0, "#f0f921"]]}], "mesh3d": [{"type": "mesh3d", "colorbar": {"outlinewidth": 0, "ticks": ""}}], "scatter": [{"fillpattern": {"fillmode": "overlay", "size": 10, "solidity": 0.2}, "type": "scatter"}], "parcoords": [{"type": "parcoords", "line": {"colorbar": {"outlinewidth": 0, "ticks": ""}}}], "scatterpolargl": [{"type": "scatterpolargl", "marker": {"colorbar": {"outlinewidth": 0, "ticks": ""}}}], "bar": [{"error_x": {"color": "#2a3f5f"}, "error_y": {"color": "#2a3f5f"}, "marker": {"line": {"color": "#E5ECF6", "width": 0.5}, "pattern": {"fillmode": "overlay", "size": 10, "solidity": 0.2}}, "type": "bar"}], "scattergeo": [{"type": "scattergeo", "marker": {"colorbar": {"outlinewidth": 0, "ticks": ""}}}], "scatterpolar": [{"type": "scatterpolar", "marker": {"colorbar": {"outlinewidth": 0, "ticks": ""}}}], "histogram": [{"marker": {"pattern": {"fillmode": "overlay", "size": 10, "solidity": 0.2}}, "type": "histogram"}], "scattergl": [{"type": "scattergl", "marker": {"colorbar": {"outlinewidth": 0, "ticks": ""}}}], "scatter3d": [{"type": "scatter3d", "line": {"colorbar": {"outlinewidth": 0, "ticks": ""}}, "marker": {"colorbar": {"outlinewidth": 0, "ticks": ""}}}], "scattermap": [{"type": "scattermap", "marker": {"colorbar": {"outlinewidth": 0, "ticks": ""}}}], "scattermapbox": [{"type": "scattermapbox", "marker": {"colorbar": {"outlinewidth": 0, "ticks": ""}}}], "scatterternary": [{"type": "scatterternary", "marker": {"colorbar": {"outlinewidth": 0, "ticks": ""}}}], "scattercarpet": [{"type": "scattercarpet", "marker": {"colorbar": {"outlinewidth": 0, "ticks": ""}}}], "carpet": [{"aaxis": {"endlinecolor": "#2a3f5f", "gridcolor": "white", "linecolor": "white", "minorgridcolor": "white", "startlinecolor": "#2a3f5f"}, "baxis": {"endlinecolor": "#2a3f5f", "gridcolor": "white", "linecolor": "white", "minorgridcolor": "white", "startlinecolor": "#2a3f5f"}, "type": "carpet"}], "table": [{"cells": {"fill": {"color": "#EBF0F8"}, "line": {"color": "white"}}, "header": {"fill": {"color": "#C8D4E3"}, "line": {"color": "white"}}, "type": "table"}], "barpolar": [{"marker": {"line": {"color": "#E5ECF6", "width": 0.5}, "pattern": {"fillmode": "overlay", "size": 10, "solidity": 0.2}}, "type": "barpolar"}], "pie": [{"automargin": true, "type": "pie"}]}, "layout": {"autotypenumbers": "strict", "colorway": ["#636efa", "#EF553B", "#00cc96", "#ab63fa", "#FFA15A", "#19d3f3", "#FF6692", "#B6E880", "#FF97FF", "#FECB52"], "font": {"color": "#2a3f5f"}, "hovermode": "closest", "hoverlabel": {"align": "left"}, "paper_bgcolor": "white", "plot_bgcolor": "#E5ECF6", "polar": {"bgcolor": "#E5ECF6", "angularaxis": {"gridcolor": "white", "linecolor": "white", "ticks": ""}, "radialaxis": {"gridcolor": "white", "linecolor": "white", "ticks": ""}}, "ternary": {"bgcolor": "#E5ECF6", "aaxis": {"gridcolor": "white", "linecolor": "white", "ticks": ""}, "baxis": {"gridcolor": "white", "linecolor": "white", "ticks": ""}, "caxis": {"gridcolor": "white", "linecolor": "white", "ticks": ""}}, "coloraxis": {"colorbar": {"outlinewidth": 0, "ticks": ""}}, "colorscale": {"sequential": [[0.0, "#0d0887"], [0.1111111111111111, "#46039f"], [0.2222222222222222, "#7201a8"], [0.3333333333333333, "#9c179e"], [0.4444444444444444, "#bd3786"], [0.5555555555555556, "#d8576b"], [0.6666666666666666, "#ed7953"], [0.7777777777777778, "#fb9f3a"], [0.8888888888888888, "#fdca26"], [1.0, "#f0f921"]], "sequentialminus": [[0.0, "#0d0887"], [0.1111111111111111, "#46039f"], [0.2222222222222222, "#7201a8"], [0.3333333333333333, "#9c179e"], [0.4444444444444444, "#bd3786"], [0.5555555555555556, "#d8576b"], [0.6666666666666666, "#ed7953"], [0.7777777777777778, "#fb9f3a"], [0.8888888888888888, "#fdca26"], [1.0, "#f0f921"]], "diverging": [[0, "#8e0152"], [0.1, "#c51b7d"], [0.2, "#de77ae"], [0.3, "#f1b6da"], [0.4, "#fde0ef"], [0.5, "#f7f7f7"], [0.6, "#e6f5d0"], [0.7, "#b8e186"], [0.8, "#7fbc41"], [0.9, "#4d9221"], [1, "#276419"]]}, "xaxis": {"gridcolor": "white", "linecolor": "white", "ticks": "", "title": {"standoff": 15}, "zerolinecolor": "white", "automargin": true, "zerolinewidth": 2}, "yaxis": {"gridcolor": "white", "linecolor": "white", "ticks": "", "title": {"standoff": 15}, "zerolinecolor": "white", "automargin": true, "zerolinewidth": 2}, "scene": {"xaxis": {"backgroundcolor": "#E5ECF6", "gridcolor": "white", "linecolor": "white", "showbackground": true, "ticks": "", "zerolinecolor": "white", "gridwidth": 2}, "yaxis": {"backgroundcolor": "#E5ECF6", "gridcolor": "white", "linecolor": "white", "showbackground": true, "ticks": "", "zerolinecolor": "white", "gridwidth": 2}, "zaxis": {"backgroundcolor": "#E5ECF6", "gridcolor": "white", "linecolor": "white", "showbackground": true, "ticks": "", "zerolinecolor": "white", "gridwidth": 2}}, "shapedefaults": {"line": {"color": "#2a3f5f"}}, "annotationdefaults": {"arrowcolor": "#2a3f5f", "arrowhead": 0, "arrowwidth": 1}, "geo": {"bgcolor": "white", "landcolor": "#E5ECF6", "subunitcolor": "white", "showland": true, "showlakes": true, "lakecolor": "white"}, "title": {"x": 0.05}, "mapbox": {"style": "light"}}}, "shapes": [{"line": {"color": "red", "dash": "dash", "width": 3}, "type": "line", "x0": -0.01096119170832729, "x1": -0.01096119170832729, "xref": "x", "y0": 0, "y1": 1, "yref": "y domain"}, {"line": {"color": "blue", "dash": "dot", "width": 2}, "type": "line", "x0": -0.009398431215418425, "x1": -0.009398431215418425, "xref": "x", "y0": 0, "y1": 1, "yref": "y domain"}, {"line": {"color": "orange", "dash": "dashdot", "width": 1}, "opacity": 0.7, "type": "line", "x0": -0.04582210690352107, "x1": -0.04582210690352107, "xref": "x", "y0": 0, "y1": 1, "yref": "y domain"}, {"line": {"color": "orange", "dash": "dashdot", "width": 1}, "opacity": 0.7, "type": "line", "x0": 0.023899723486866496, "x1": 0.023899723486866496, "xref": "x", "y0": 0, "y1": 1, "yref": "y domain"}], "annotations": [{"showarrow": false, "text": "均值: -0.0110", "x": -0.01096119170832729, "xanchor": "center", "xref": "x", "y": 1, "yanchor": "bottom", "yref": "y domain"}, {"showarrow": false, "text": "中位数: -0.0094", "x": -0.009398431215418425, "xanchor": "center", "xref": "x", "y": 0, "yanchor": "top", "yref": "y domain"}, {"showarrow": false, "text": "-1σ: -0.0458", "x": -0.04582210690352107, "xanchor": "right", "xref": "x", "y": 1, "yanchor": "top", "yref": "y domain"}, {"showarrow": false, "text": "+1σ: 0.0239", "x": 0.023899723486866496, "xanchor": "left", "xref": "x", "y": 1, "yanchor": "top", "yref": "y domain"}, {"align": "left", "bgcolor": "rgba(255,255,255,0.85)", "bordercolor": "rgba(0,0,0,0.2)", "borderwidth": 1, "showarrow": false, "text": "<b>⭐ 数据质量诊断:</b><br>未发现明显异常", "x": 0.98, "xanchor": "right", "xref": "paper", "y": 0.02, "yanchor": "bottom", "yref": "paper"}], "legend": {"orientation": "h", "yanchor": "top", "y": 0.98, "xanchor": "right", "x": 0.98, "bgcolor": "rgba(255,255,255,0.8)", "bordercolor": "rgba(0,0,0,0.1)", "borderwidth": 1}, "xaxis": {"title": {"text": "IC值 (预测与实际收益相关系数)"}, "range": [-0.130534941951523, 0.1135385891909174], "tickformat": ".3f", "dtick": 0.0203394609285367}, "title": {"text": "IC分布图 - ✅ 相对正常<br><sub>样本: 241天 | 正IC: 39.0% | 负IC: 61.0% | 均值±标准差: -0.0110±0.0349</sub>"}, "yaxis": {"title": {"text": "频次 (天数)"}, "autorange": true}, "height": 520, "bargap": 0.02, "showlegend": true}};
+                    var cfg = {"displayModeBar": false, "displaylogo": false, "modeBarButtonsToRemove": ["pan2d", "lasso2d"]};
+                    if (document.getElementById("ic_distribution_light")) {
+                        Plotly.newPlot("ic_distribution_light", fig.data || [], fig.layout || {}, cfg);
+                    }
+                })();
+            </script>
+            
+                    </div>
+                    <div class="metrics-section">
+                        
+                <table style="width:100%;border-collapse:collapse;margin:10px 0;">
+                    <thead>
+                        <tr style="background:#f4f6f8;text-align:left;"><th style="padding:8px">指标</th><th style="padding:8px">数值</th></tr>
+                    </thead>
+                    <tbody><tr><td>IC均值</td><td>-0.0110</td></tr><tr><td>IC标准差</td><td>0.0349</td></tr><tr><td>IC最小值</td><td>-0.1105</td></tr><tr><td>IC最大值</td><td>0.0985</td></tr><tr><td>正IC比例</td><td>39.0%</td></tr><tr><td>负IC比例</td><td>61.0%</td></tr><tr><td>IC绝对值均值</td><td>0.0287</td></tr><tr><td>数据质量评估</td><td>✅ 相对正常</td></tr></tbody>
+                </table>
+                
+                    </div>
+                    <div class="explain">
+            <div style="margin: 20px 0; padding: 15px; background-color: #f5fff5; border-left: 4px solid #28a745;">
+                <h4>✅ IC分布诊断：相对正常</h4>
+                <ul>
+                    <li>正IC比例：39.0%；负IC比例：61.0%</li>
+                    <li>均值±标准差：-0.0110 ± 0.0349</li>
+                    <li>分布形态：围绕 0 近似对称</li>
+            </ul>
+        </div>
+            
+        <h4>📊 IC分布技术解读</h4>
+            <ul>
+                <li><strong>IC定义</strong>: Information Coefficient，每个交易日横截面上预测值与实际收益的皮尔逊相关系数</li>
+                <li><strong>统计特征</strong>: 
+                    <ul>
+                        <li>均值: -0.0110</li>
+                        <li>标准差: 0.0349</li>
+                        <li>偏度: -0.054</li>
+                        <li>峰度: 0.136</li>
+                    </ul>
+                </li>
+            </ul>
+        </div>
+                </div>
+                <script>
+                    (function ensureMathJax() {
+                        var rootEl = document.getElementById('page-root') || document.body;
+                        function typeset() {
+                            if (window.MathJax) {
+                                if (window.MathJax.typesetPromise) {
+                                    window.MathJax.typesetPromise([rootEl]).catch(function (err) {
+                                        if (window.console && window.console.warn) {
+                                            console.warn('MathJax typeset failed:', err);
+                                        }
+                                    });
+                                } else if (window.MathJax.Hub && window.MathJax.Hub.Queue) {
+                                    window.MathJax.Hub.Queue(['Typeset', window.MathJax.Hub, rootEl]);
+                                }
+                            }
+                        }
+                        if (document.readyState === 'loading') {
+                            document.addEventListener('DOMContentLoaded', typeset);
+                        } else {
+                            typeset();
+                        }
+                        window.addEventListener('load', typeset);
+                        var mjScript = document.getElementById('MathJax-script');
+                        if (mjScript && !mjScript.hasAttribute('data-mathjax-listener')) {
+                            mjScript.addEventListener('load', typeset);
+                            mjScript.setAttribute('data-mathjax-listener', 'true');
+                        }
+                        if (!window.MathJax) {
+                            var attempts = 0;
+                            var timer = setInterval(function () {
+                                attempts += 1;
+                                if (window.MathJax) {
+                                    clearInterval(timer);
+                                    typeset();
+                                } else if (attempts > 20) {
+                                    clearInterval(timer);
+                                }
+                            }, 250);
+                        }
+                    })();
+                </script>
+            </body>
+            </html>
+            

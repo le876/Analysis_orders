@@ -1,0 +1,104 @@
+
+            <!DOCTYPE html>
+            <html>
+            <head>
+                <meta charset="utf-8" />
+                <meta name="viewport" content="width=device-width, initial-scale=1" />
+                <title>日绝对收益分布（盯市）</title>
+                <script src="https://cdn.plot.ly/plotly-latest.min.js"></script>
+                <style>
+                    body { font-family: Arial, sans-serif; margin: 20px; }
+                    h1 { margin: 0 0 15px 0; font-size: 22px; }
+                    .card { background: #fff; padding: 16px; border-radius: 10px; box-shadow: 0 2px 8px rgba(0,0,0,0.06); }
+                    .chart-container { margin-bottom: 20px; }
+                    .metrics-section { margin-top: 15px; }
+                    .explain { margin-top: 14px; color: #444; line-height: 1.7; }
+                    table td, table th { border-bottom: 1px solid #eee; padding: 8px; }
+                </style>
+                <script>
+                    window.MathJax = {
+                        tex: {
+                            inlineMath: [["$","$"],["\(","\)"]],
+                            displayMath: [["$$","$$"],["\[","\]"]],
+                            processEscapes: true
+                        },
+                        options: { skipHtmlTags: ["script","noscript","style","textarea","pre","code"] },
+                        svg: { fontCache: 'global' }
+                    };
+                </script>
+                <script id="MathJax-script" async src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-chtml-full.js" onerror="this.onerror=null; this.src='../assets/mathjax/tex-chtml-full.js';"></script>
+            </head>
+            <body>
+                <div class="card" id="page-root"> 
+                    <h1>日绝对收益分布（盯市）</h1>
+                    <div class="chart-container">
+                        
+            <div id="returns_distribution_light" class="plotly-graph-div" style="height:450px; width:100%;"></div>
+            <script type="text/javascript">
+                window.PLOTLYENV=window.PLOTLYENV || {};
+                (function() {
+                    var fig = {"data": [{"hovertemplate": "日绝对收益: ¥%{x:,.0f}<br>频次: %{y}<extra></extra>", "marker": {"color": "lightcoral", "line": {"color": "darkred", "width": 1}}, "name": "绝对收益分布", "nbinsx": 44, "opacity": 0.75, "x": [199421.0, 114081.0, 156128.0, 319012.0, -85582.0, 180365.0, -54967.0, 282584.0, 41334.0, 14894.0, 298740.0, 140521.0, 330033.0, 252932.0, 158136.0, 219726.0, -39736.0, 266087.0, 327289.0, 302341.0, 264997.0, 258734.0, 593437.0, 735303.0, 380047.0, 199497.0, 89132.0, 365216.0, -33910.0, 13868.0, 237361.0, 79842.0, 305848.0, -25706.0, 393851.0, -60586.0, 290470.0, 317292.0, 270090.0, 112130.0, 358940.0, 147076.0, 54486.0, 263904.0, 223532.0, 237586.0, 94336.0, 147464.0, 331078.0, 114854.0, 220546.0, 275042.0, 244756.0, 195366.0, 460874.0, 98462.0, 123046.0, 118684.0, 347042.0, 266576.0, 313712.0, 92348.0, 345696.0, 54690.0, 256742.0, 196386.0, 449688.0, 221232.0, 215770.0, 257936.0, 156766.0, 211334.0, 35040.0, 177978.0, 153292.0, 298168.0, 339130.0, 31894.0, 189924.0, 326424.0, -86094.0, 265944.0, 199700.0, 126686.0, 208406.0, 92720.0, 44002.0, 189682.0, 313444.0, 29858.0, 289502.0, 117938.0, 166292.0, 260234.0, 56328.0, 146606.0, 86822.0, 293462.0, 155506.0, 313744.0, 202264.0, 159180.0, 29380.0, 75434.0, 170716.0, 14136.0, 153194.0, 28184.0, 241142.0, 232160.0, 114974.0, 302318.0, 119192.0, 22242.0, 289844.0, 31924.0, 118942.0, 232246.0, 162110.0, 325820.0, -65148.0, 292168.0, 85790.0, 224042.0, -10102.0, 155044.0, 227224.0, 36818.0, 119130.0, 51880.0, 61612.0, 77820.0, 249084.0, 143548.0, 5492.0, 132804.0, 153932.0, 19516.0, 233780.0, 220904.0, 163176.0, 155212.0, 88564.0, 98640.0, 49368.0, 210864.0, 154340.0, -1680.0, 180812.0, -62044.0, 150740.0, 91044.0, 240680.0, 85900.0, 162264.0, 144188.0, 66184.0, 165448.0, -37732.0, 51972.0, 280892.0, 243424.0, -1932.0, 158052.0, -15332.0, 163252.0, 91948.0, 28500.0, 116860.0, -22584.0, 174756.0, 120648.0, 118780.0, 106912.0, 59120.0, 48244.0, 321736.0, 135392.0, 409720.0, 567568.0, 2266688.0, 350888.0, 861084.0, 687892.0, 244736.0, 241672.0, 116952.0, 378700.0, 99396.0, 317336.0, 226280.0, 180144.0, 262992.0, 154172.0, 365956.0, 365920.0, 333820.0, 245236.0, 428344.0, 231528.0, 255592.0, 318020.0, 416920.0, 629720.0, 312440.0, 320244.0, 324552.0, 316364.0, 239668.0, 450508.0, 164032.0, 171632.0, 183444.0, 239436.0, 222636.0, 292836.0, 142076.0, 275444.0, 92620.0, 225844.0, 242516.0, 297212.0, 120884.0, 143892.0, 204124.0, 808268.0, 199292.0, 187976.0, 305180.0, 256104.0, 242516.0, 200720.0, 142536.0, 180952.0, 383664.0, 101920.0, 353328.0, 157816.0, 214288.0, 207360.0, 279856.0], "type": "histogram"}], "layout": {"template": {"data": {"histogram2dcontour": [{"type": "histogram2dcontour", "colorbar": {"outlinewidth": 0, "ticks": ""}, "colorscale": [[0.0, "#0d0887"], [0.1111111111111111, "#46039f"], [0.2222222222222222, "#7201a8"], [0.3333333333333333, "#9c179e"], [0.4444444444444444, "#bd3786"], [0.5555555555555556, "#d8576b"], [0.6666666666666666, "#ed7953"], [0.7777777777777778, "#fb9f3a"], [0.8888888888888888, "#fdca26"], [1.0, "#f0f921"]]}], "choropleth": [{"type": "choropleth", "colorbar": {"outlinewidth": 0, "ticks": ""}}], "histogram2d": [{"type": "histogram2d", "colorbar": {"outlinewidth": 0, "ticks": ""}, "colorscale": [[0.0, "#0d0887"], [0.1111111111111111, "#46039f"], [0.2222222222222222, "#7201a8"], [0.3333333333333333, "#9c179e"], [0.4444444444444444, "#bd3786"], [0.5555555555555556, "#d8576b"], [0.6666666666666666, "#ed7953"], [0.7777777777777778, "#fb9f3a"], [0.8888888888888888, "#fdca26"], [1.0, "#f0f921"]]}], "heatmap": [{"type": "heatmap", "colorbar": {"outlinewidth": 0, "ticks": ""}, "colorscale": [[0.0, "#0d0887"], [0.1111111111111111, "#46039f"], [0.2222222222222222, "#7201a8"], [0.3333333333333333, "#9c179e"], [0.4444444444444444, "#bd3786"], [0.5555555555555556, "#d8576b"], [0.6666666666666666, "#ed7953"], [0.7777777777777778, "#fb9f3a"], [0.8888888888888888, "#fdca26"], [1.0, "#f0f921"]]}], "contourcarpet": [{"type": "contourcarpet", "colorbar": {"outlinewidth": 0, "ticks": ""}}], "contour": [{"type": "contour", "colorbar": {"outlinewidth": 0, "ticks": ""}, "colorscale": [[0.0, "#0d0887"], [0.1111111111111111, "#46039f"], [0.2222222222222222, "#7201a8"], [0.3333333333333333, "#9c179e"], [0.4444444444444444, "#bd3786"], [0.5555555555555556, "#d8576b"], [0.6666666666666666, "#ed7953"], [0.7777777777777778, "#fb9f3a"], [0.8888888888888888, "#fdca26"], [1.0, "#f0f921"]]}], "surface": [{"type": "surface", "colorbar": {"outlinewidth": 0, "ticks": ""}, "colorscale": [[0.0, "#0d0887"], [0.1111111111111111, "#46039f"], [0.2222222222222222, "#7201a8"], [0.3333333333333333, "#9c179e"], [0.4444444444444444, "#bd3786"], [0.5555555555555556, "#d8576b"], [0.6666666666666666, "#ed7953"], [0.7777777777777778, "#fb9f3a"], [0.8888888888888888, "#fdca26"], [1.0, "#f0f921"]]}], "mesh3d": [{"type": "mesh3d", "colorbar": {"outlinewidth": 0, "ticks": ""}}], "scatter": [{"fillpattern": {"fillmode": "overlay", "size": 10, "solidity": 0.2}, "type": "scatter"}], "parcoords": [{"type": "parcoords", "line": {"colorbar": {"outlinewidth": 0, "ticks": ""}}}], "scatterpolargl": [{"type": "scatterpolargl", "marker": {"colorbar": {"outlinewidth": 0, "ticks": ""}}}], "bar": [{"error_x": {"color": "#2a3f5f"}, "error_y": {"color": "#2a3f5f"}, "marker": {"line": {"color": "#E5ECF6", "width": 0.5}, "pattern": {"fillmode": "overlay", "size": 10, "solidity": 0.2}}, "type": "bar"}], "scattergeo": [{"type": "scattergeo", "marker": {"colorbar": {"outlinewidth": 0, "ticks": ""}}}], "scatterpolar": [{"type": "scatterpolar", "marker": {"colorbar": {"outlinewidth": 0, "ticks": ""}}}], "histogram": [{"marker": {"pattern": {"fillmode": "overlay", "size": 10, "solidity": 0.2}}, "type": "histogram"}], "scattergl": [{"type": "scattergl", "marker": {"colorbar": {"outlinewidth": 0, "ticks": ""}}}], "scatter3d": [{"type": "scatter3d", "line": {"colorbar": {"outlinewidth": 0, "ticks": ""}}, "marker": {"colorbar": {"outlinewidth": 0, "ticks": ""}}}], "scattermap": [{"type": "scattermap", "marker": {"colorbar": {"outlinewidth": 0, "ticks": ""}}}], "scattermapbox": [{"type": "scattermapbox", "marker": {"colorbar": {"outlinewidth": 0, "ticks": ""}}}], "scatterternary": [{"type": "scatterternary", "marker": {"colorbar": {"outlinewidth": 0, "ticks": ""}}}], "scattercarpet": [{"type": "scattercarpet", "marker": {"colorbar": {"outlinewidth": 0, "ticks": ""}}}], "carpet": [{"aaxis": {"endlinecolor": "#2a3f5f", "gridcolor": "white", "linecolor": "white", "minorgridcolor": "white", "startlinecolor": "#2a3f5f"}, "baxis": {"endlinecolor": "#2a3f5f", "gridcolor": "white", "linecolor": "white", "minorgridcolor": "white", "startlinecolor": "#2a3f5f"}, "type": "carpet"}], "table": [{"cells": {"fill": {"color": "#EBF0F8"}, "line": {"color": "white"}}, "header": {"fill": {"color": "#C8D4E3"}, "line": {"color": "white"}}, "type": "table"}], "barpolar": [{"marker": {"line": {"color": "#E5ECF6", "width": 0.5}, "pattern": {"fillmode": "overlay", "size": 10, "solidity": 0.2}}, "type": "barpolar"}], "pie": [{"automargin": true, "type": "pie"}]}, "layout": {"autotypenumbers": "strict", "colorway": ["#636efa", "#EF553B", "#00cc96", "#ab63fa", "#FFA15A", "#19d3f3", "#FF6692", "#B6E880", "#FF97FF", "#FECB52"], "font": {"color": "#2a3f5f"}, "hovermode": "closest", "hoverlabel": {"align": "left"}, "paper_bgcolor": "white", "plot_bgcolor": "#E5ECF6", "polar": {"bgcolor": "#E5ECF6", "angularaxis": {"gridcolor": "white", "linecolor": "white", "ticks": ""}, "radialaxis": {"gridcolor": "white", "linecolor": "white", "ticks": ""}}, "ternary": {"bgcolor": "#E5ECF6", "aaxis": {"gridcolor": "white", "linecolor": "white", "ticks": ""}, "baxis": {"gridcolor": "white", "linecolor": "white", "ticks": ""}, "caxis": {"gridcolor": "white", "linecolor": "white", "ticks": ""}}, "coloraxis": {"colorbar": {"outlinewidth": 0, "ticks": ""}}, "colorscale": {"sequential": [[0.0, "#0d0887"], [0.1111111111111111, "#46039f"], [0.2222222222222222, "#7201a8"], [0.3333333333333333, "#9c179e"], [0.4444444444444444, "#bd3786"], [0.5555555555555556, "#d8576b"], [0.6666666666666666, "#ed7953"], [0.7777777777777778, "#fb9f3a"], [0.8888888888888888, "#fdca26"], [1.0, "#f0f921"]], "sequentialminus": [[0.0, "#0d0887"], [0.1111111111111111, "#46039f"], [0.2222222222222222, "#7201a8"], [0.3333333333333333, "#9c179e"], [0.4444444444444444, "#bd3786"], [0.5555555555555556, "#d8576b"], [0.6666666666666666, "#ed7953"], [0.7777777777777778, "#fb9f3a"], [0.8888888888888888, "#fdca26"], [1.0, "#f0f921"]], "diverging": [[0, "#8e0152"], [0.1, "#c51b7d"], [0.2, "#de77ae"], [0.3, "#f1b6da"], [0.4, "#fde0ef"], [0.5, "#f7f7f7"], [0.6, "#e6f5d0"], [0.7, "#b8e186"], [0.8, "#7fbc41"], [0.9, "#4d9221"], [1, "#276419"]]}, "xaxis": {"gridcolor": "white", "linecolor": "white", "ticks": "", "title": {"standoff": 15}, "zerolinecolor": "white", "automargin": true, "zerolinewidth": 2}, "yaxis": {"gridcolor": "white", "linecolor": "white", "ticks": "", "title": {"standoff": 15}, "zerolinecolor": "white", "automargin": true, "zerolinewidth": 2}, "scene": {"xaxis": {"backgroundcolor": "#E5ECF6", "gridcolor": "white", "linecolor": "white", "showbackground": true, "ticks": "", "zerolinecolor": "white", "gridwidth": 2}, "yaxis": {"backgroundcolor": "#E5ECF6", "gridcolor": "white", "linecolor": "white", "showbackground": true, "ticks": "", "zerolinecolor": "white", "gridwidth": 2}, "zaxis": {"backgroundcolor": "#E5ECF6", "gridcolor": "white", "linecolor": "white", "showbackground": true, "ticks": "", "zerolinecolor": "white", "gridwidth": 2}}, "shapedefaults": {"line": {"color": "#2a3f5f"}}, "annotationdefaults": {"arrowcolor": "#2a3f5f", "arrowhead": 0, "arrowwidth": 1}, "geo": {"bgcolor": "white", "landcolor": "#E5ECF6", "subunitcolor": "white", "showland": true, "showlakes": true, "lakecolor": "white"}, "title": {"x": 0.05}, "mapbox": {"style": "light"}}}, "shapes": [{"line": {"color": "red", "dash": "dash", "width": 2}, "type": "line", "x0": 207542.0663900415, "x1": 207542.0663900415, "xref": "x", "y0": 0, "y1": 1, "yref": "y domain"}, {"line": {"color": "blue", "dash": "dot", "width": 1.5}, "type": "line", "x0": 189924.0, "x1": 189924.0, "xref": "x", "y0": 0, "y1": 1, "yref": "y domain"}, {"line": {"color": "orange", "dash": "dashdot", "width": 1}, "opacity": 0.7, "type": "line", "x0": 11720.676196859044, "x1": 11720.676196859044, "xref": "x", "y0": 0, "y1": 1, "yref": "y domain"}, {"line": {"color": "orange", "dash": "dashdot", "width": 1}, "opacity": 0.7, "type": "line", "x0": 403363.45658322395, "x1": 403363.45658322395, "xref": "x", "y0": 0, "y1": 1, "yref": "y domain"}], "xaxis": {"title": {"text": "日绝对收益 (¥)"}, "tickformat": ",.0f"}, "title": {"text": "日绝对收益分布（盯市）<br><sub>样本: 241天 | 范围: ¥-86,094 ~ ¥2,266,688 | 偏度: 5.235 | 峰度: 50.585</sub>"}, "yaxis": {"title": {"text": "频次 (天数)"}}, "height": 450, "bargap": 0.1, "annotations": [{"bgcolor": "rgba(255,255,255,0.9)", "bordercolor": "rgba(0,0,0,0.2)", "borderwidth": 1, "font": {"size": 11}, "showarrow": false, "text": "<b>统计信息</b><br>均值: ¥207,542<br>标准差: ¥195,821<br>中位数: ¥189,924", "x": 0.98, "xanchor": "right", "xref": "paper", "y": 0.98, "yanchor": "top", "yref": "paper"}, {"bgcolor": "rgba(255,255,255,0.9)", "bordercolor": "rgba(0,0,0,0.2)", "borderwidth": 1, "font": {"size": 10}, "showarrow": false, "text": "<b>图例</b><br><span style='color:red'>━━</span> 均值<br><span style='color:blue'>┅┅</span> 中位数<br><span style='color:orange'>⋯⋯</span> ±1σ", "x": 0.02, "xanchor": "left", "xref": "paper", "y": 0.98, "yanchor": "top", "yref": "paper"}]}};
+                    var cfg = {"displayModeBar": false, "displaylogo": false, "modeBarButtonsToRemove": ["pan2d", "lasso2d"]};
+                    if (document.getElementById("returns_distribution_light")) {
+                        Plotly.newPlot("returns_distribution_light", fig.data || [], fig.layout || {}, cfg);
+                    }
+                })();
+            </script>
+            
+                    </div>
+                    <div class="metrics-section">
+                        
+                <table style="width:100%;border-collapse:collapse;margin:10px 0;">
+                    <thead>
+                        <tr style="background:#f4f6f8;text-align:left;"><th style="padding:8px">指标</th><th style="padding:8px">数值</th></tr>
+                    </thead>
+                    <tbody><tr><td>累计资金效率(ΣPnL/ΣSpend)</td><td>0.21%</td></tr><tr><td>样本有效天数</td><td>241天</td></tr><tr><td>胜率</td><td>93.78%</td></tr><tr><td>年化波动率(序列)</td><td>2.54%</td></tr><tr><td>数据来源</td><td>PnL(花出的钱)</td></tr><tr><td>计算方法</td><td>当日盯市PnL ÷ 当日买入成交额（仅分母>0日）</td></tr><tr><td>交易天数</td><td>241天</td></tr></tbody>
+                </table>
+                
+                    </div>
+                    <div class="explain"><p>展示日绝对收益（盯市）分布形态，定位极端值与偏态风险。</p></div>
+                </div>
+                <script>
+                    (function ensureMathJax() {
+                        var rootEl = document.getElementById('page-root') || document.body;
+                        function typeset() {
+                            if (window.MathJax) {
+                                if (window.MathJax.typesetPromise) {
+                                    window.MathJax.typesetPromise([rootEl]).catch(function (err) {
+                                        if (window.console && window.console.warn) {
+                                            console.warn('MathJax typeset failed:', err);
+                                        }
+                                    });
+                                } else if (window.MathJax.Hub && window.MathJax.Hub.Queue) {
+                                    window.MathJax.Hub.Queue(['Typeset', window.MathJax.Hub, rootEl]);
+                                }
+                            }
+                        }
+                        if (document.readyState === 'loading') {
+                            document.addEventListener('DOMContentLoaded', typeset);
+                        } else {
+                            typeset();
+                        }
+                        window.addEventListener('load', typeset);
+                        var mjScript = document.getElementById('MathJax-script');
+                        if (mjScript && !mjScript.hasAttribute('data-mathjax-listener')) {
+                            mjScript.addEventListener('load', typeset);
+                            mjScript.setAttribute('data-mathjax-listener', 'true');
+                        }
+                        if (!window.MathJax) {
+                            var attempts = 0;
+                            var timer = setInterval(function () {
+                                attempts += 1;
+                                if (window.MathJax) {
+                                    clearInterval(timer);
+                                    typeset();
+                                } else if (attempts > 20) {
+                                    clearInterval(timer);
+                                }
+                            }, 250);
+                        }
+                    })();
+                </script>
+            </body>
+            </html>
+            
