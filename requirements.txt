@@ -1,0 +1,6 @@
+﻿pandas>=2.0
+numpy>=1.24
+plotly>=5.0
+scipy>=1.10
+statsmodels>=0.13
+pyarrow>=10.0

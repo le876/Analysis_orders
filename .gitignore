@@ -1,0 +1,7 @@
+﻿data/
+mtm_analysis_results/
+reports/
+docs/
+*.pyc
+__pycache__/
+.DS_Store
