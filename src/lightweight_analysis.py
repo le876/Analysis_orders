@@ -25,9 +25,10 @@ from scipy import stats
 from statsmodels.stats.multitest import multipletests
 import sys
 import os
-from typing import Optional
+from typing import Optional, List, Tuple
 import re
 import urllib.request
+from urllib.parse import quote
 
 # Windows 终端中文乱码修复与安全打印
 def _configure_windows_console_utf8() -> None:
@@ -101,6 +102,83 @@ class LightweightAnalysis:
         self._positions_cache: Optional[pd.DataFrame] = None
         self._factor_build_meta: dict = {}
         self._credit_rules: dict = {}
+        self._risk_free_cache: dict = {}
+
+    # ------------------------------------------------------------------
+    # 无风险利率获取（按策略末日对齐）
+    # ------------------------------------------------------------------
+    def _get_risk_free_rate(self, target_date: Optional[str] = None) -> Tuple[float, str, Optional[str]]:
+        """
+        返回 (年化无风险利率, 来源, 数据日期)。
+        优先级：
+        1) 环境变量 RISK_FREE_RATE（允许 0.025 或 2.5 两种写法）
+        2) 本地缓存 reports/risk_free_cache.json（若缓存日期不晚于 target_date 则复用）
+        3) 在线获取东财国债收益率表（取 EMM00166466 近似1Y，按 target_date 向前取最近一条），失败则默认2%
+        """
+        # 1) 环境变量
+        env_val = os.getenv("RISK_FREE_RATE")
+        if env_val:
+            try:
+                v = float(env_val)
+                rate = v / 100 if v > 1 else v
+                return rate, "env_RISK_FREE_RATE", None
+            except Exception:
+                pass
+
+        cache_path = Path("reports") / "risk_free_cache.json"
+        # 2) 缓存复用
+        try:
+            if cache_path.exists():
+                cache = json.loads(cache_path.read_text(encoding='utf-8'))
+                rate_cached = float(cache["rate"])
+                source_cached = cache.get("source", "cache")
+                data_date = cache.get("data_date")
+                if target_date is None or (data_date and data_date <= target_date):
+                    return rate_cached, source_cached, data_date
+        except Exception:
+            pass
+
+        # 3) 在线兜底
+        risk_free_rate = 0.02
+        source = "fallback_default"
+        data_date: Optional[str] = None
+        try:
+            url = (
+                "https://datacenter-web.eastmoney.com/api/data/v1/get"
+                "?reportName=RPTA_WEB_TREASURYYIELD&columns=ALL"
+                "&sortColumns=SOLAR_DATE&sortTypes=-1&pageSize=1&pageNumber=1"
+            )
+            if target_date:
+                filter_expr = f"(SOLAR_DATE<='{target_date}')"
+                url += f"&filter={quote(filter_expr)}"
+            with urllib.request.urlopen(url, timeout=6) as resp:
+                content = resp.read().decode('utf-8')
+            payload = json.loads(content)
+            rows = payload.get("result", {}).get("data", [])
+            if rows:
+                row = rows[0]
+                rf_pct = row.get("EMM00166466")
+                if rf_pct is not None:
+                    risk_free_rate = float(rf_pct) / 100.0
+                    source = "eastmoney_treasury_1y"
+                    data_date = row.get("SOLAR_DATE")
+        except Exception as e:
+            print(f"⚠️ 在线获取无风险利率失败，使用默认值2%: {e}")
+
+        # 写缓存
+        try:
+            cache_path.parent.mkdir(parents=True, exist_ok=True)
+            cache_obj = {
+                "rate": risk_free_rate,
+                "source": source,
+                "data_date": data_date,
+                "fetched_at": datetime.now().isoformat()
+            }
+            cache_path.write_text(json.dumps(cache_obj, ensure_ascii=False, indent=2), encoding='utf-8')
+        except Exception:
+            pass
+
+        return risk_free_rate, source, data_date
 
     def _parquet_columns(self, path: str) -> list:
         """获取 parquet 文件的列名（不读取数据）"""
@@ -346,6 +424,21 @@ class LightweightAnalysis:
         """轻量级模型性能分析"""
         print("\n🎯 === 模型性能分析 (轻量级) ===")
         data_processing_steps = ""
+        risk_free_rate_annual = 0.02
+        rf_source = "fallback_default"
+        rf_data_date: Optional[str] = None
+        risk_free_daily = risk_free_rate_annual / 252
+        return_series_full = None
+        return_series_aligned = None
+        sharpe_full_value = None
+        rolling_sharpe_latest = None
+        # 无风险利率（默认2%年化，可按末日对齐）
+        risk_free_rate_annual = 0.02
+        rf_source = "fallback_default"
+        rf_data_date: Optional[str] = None
+        risk_free_daily = risk_free_rate_annual / 252
+        return_series_full = None
+        return_series_aligned = None
         
         # 0) 预处理：仅保留必要列并去除缺失
         required_cols = ['Code', 'Timestamp', 'pred', 'real']
@@ -432,7 +525,8 @@ class LightweightAnalysis:
                 'IR(信息比率)': f"{(daily_ic.mean()/daily_ic.std() if daily_ic.std()>0 else 0):.4f}",
                 '正IC占比': f"{(daily_ic>0).mean():.1%}",
                 '周均IC(T+1)': f"{weekly_ic.mean():.4f}",
-                '月均IC(T+1)': f"{monthly_ic.mean():.4f}"
+                '月均IC(T+1)': f"{monthly_ic.mean():.4f}",
+                '无风险年化(Sharpe)': f"{risk_free_rate_annual*100:.2f}%@{rf_source if rf_source else 'auto'}"
             }
             ic_explain = (
                 "<ul>"
@@ -452,6 +546,7 @@ class LightweightAnalysis:
                 
             # 创建图表 - 彻底修复版本
             fig_ic = go.Figure()
+            extra_figs_for_ic: List[Tuple[str, go.Figure]] = []
             profit_trace_idx = None
             
             # 添加10日移动平均 - 确保平滑效果
@@ -467,6 +562,8 @@ class LightweightAnalysis:
             x_dates = [x.strftime('%Y-%m-%d') if hasattr(x, 'strftime') else str(x) for x in plot_ic_series.index.tolist()]
             y_ic = plot_ic_series.values.astype(float).tolist()
             y_rolling = plot_rolling_series.values.astype(float).tolist()
+            if return_series_full is not None:
+                return_series_aligned = return_series_full.reindex(pd.to_datetime(plot_ic_series.index))
             
             # 先添加移动平均线（作为背景）
             fig_ic.add_trace(go.Scatter(
@@ -587,6 +684,17 @@ class LightweightAnalysis:
                             return 0.0
                     
                     mtm_df['daily_return_num'] = mtm_df['daily_return'].apply(parse_return_for_annotation)
+                    return_series_full = pd.Series(
+                        mtm_df['daily_return_num'].values,
+                        index=pd.to_datetime(mtm_df['date'])
+                    ).sort_index()
+                    try:
+                        last_date = return_series_full.index.max()
+                        target_date_str = pd.to_datetime(last_date).strftime('%Y-%m-%d')
+                        risk_free_rate_annual, rf_source, rf_data_date = self._get_risk_free_rate(target_date_str)
+                        risk_free_daily = risk_free_rate_annual / 252
+                    except Exception:
+                        pass
                     
                     # 找到收益最高和最低的日期
                     max_return_date = mtm_df.loc[mtm_df['daily_return_num'].idxmax(), 'date']
@@ -708,6 +816,101 @@ class LightweightAnalysis:
                     
             except Exception as e:
                 print(f"   ⚠️ 添加日度绝对盈利数据失败: {e}")
+
+            # Sharpe 可视化（真实净值口径，按末日对齐无风险利率）
+            if return_series_full is not None and len(return_series_full.dropna()) > 10:
+                sharpe_window = 60 if len(return_series_full) >= 90 else max(20, len(return_series_full) // 3 or 5)
+                min_periods_sharpe = max(5, sharpe_window // 3)
+                excess_full = return_series_full - risk_free_daily
+                rolling_excess = excess_full.rolling(window=sharpe_window, min_periods=min_periods_sharpe)
+                sharpe_mean = rolling_excess.mean()
+                sharpe_std = rolling_excess.std(ddof=1).replace(0, np.nan)
+                sharpe_series_full = sharpe_mean.divide(sharpe_std) * np.sqrt(252)
+                sharpe_series_plot = sharpe_series_full.sort_index()
+                sharpe_std_plot = sharpe_std.reindex(sharpe_series_plot.index)
+                full_std = excess_full.std(ddof=1)
+                if full_std > 0:
+                    sharpe_full_value = float(excess_full.mean() / full_std * np.sqrt(252))
+                sharpe_latest_value = float(sharpe_series_full.dropna().iloc[-1]) if not sharpe_series_full.dropna().empty else None
+                rolling_std_latest = float(sharpe_std.dropna().iloc[-1]) if not sharpe_std.dropna().empty else None
+                if sharpe_latest_value is not None:
+                    rolling_sharpe_latest = sharpe_latest_value
+
+                sharpe_x = [pd.to_datetime(idx).strftime('%Y-%m-%d') if not pd.isna(idx) else '' for idx in sharpe_series_plot.index]
+                sharpe_y = [None if pd.isna(v) else float(v) for v in sharpe_series_plot.values]
+                sharpe_std_hover = [None if pd.isna(v) else float(v) for v in sharpe_std_plot.values]
+                indicator_value = rolling_sharpe_latest if rolling_sharpe_latest is not None else (sharpe_full_value if sharpe_full_value is not None else 0.0)
+
+                fig_sharpe = make_subplots(
+                    rows=2,
+                    cols=1,
+                    specs=[[{"type": "indicator"}], [{"type": "xy"}]],
+                    row_heights=[0.35, 0.65],
+                    vertical_spacing=0.08
+                )
+                fig_sharpe.add_trace(
+                        go.Scatter(
+                            x=sharpe_x,
+                            y=sharpe_y,
+                            mode='lines',
+                            name=f'滚动Sharpe({sharpe_window}日年化)',
+                            line=dict(color='#8e44ad', width=2),
+                            hovertemplate='日期: %{x}<br>Sharpe: %{y:.3f}<br>标准差: %{customdata:.4f}<extra></extra>',
+                            customdata=sharpe_std_hover
+                        ),
+                        row=2,
+                        col=1
+                    )
+                fig_sharpe.add_hline(y=1.0, line=dict(color='#95a5a6', dash='dash'), row=2, col=1, annotation_text="Sharpe=1", annotation_position="top left")
+                fig_sharpe.add_hline(y=1.5, line=dict(color='#bdc3c7', dash='dot'), row=2, col=1, annotation_text="Sharpe=1.5", annotation_position="top right")
+                fig_sharpe.add_trace(
+                    go.Indicator(
+                        mode="number+delta",
+                        value=indicator_value,
+                        delta={'reference': 1.0, 'valueformat': '.2f'},
+                        number={'valueformat': '.3f'},
+                        title={'text': f"当前年化Sharpe（{sharpe_window}日滚动）<br><span style='font-size:12px'>无风险年化 {risk_free_rate_annual*100:.2f}% [{rf_source}]</span>"}
+                    ),
+                    row=1,
+                    col=1
+                )
+                fig_sharpe.update_yaxes(title_text='滚动Sharpe(年化)', row=2, col=1, tickformat='.2f')
+                fig_sharpe.update_xaxes(title_text='日期', row=2, col=1)
+                fig_sharpe.update_layout(
+                    height=520,
+                    title=f'夏普比率（真实净值口径，滚动{sharpe_window}日）',
+                    hovermode='x unified',
+                    showlegend=False,
+                    margin=dict(t=80, b=40, l=60, r=30)
+                )
+                extra_figs_for_ic.append(('strategy_sharpe_nav', fig_sharpe))
+                sharpe_metrics = {
+                    '滚动窗口(交易日)': f"{sharpe_window}",
+                    '无风险年化': f"{risk_free_rate_annual*100:.2f}%@{rf_source if rf_source else 'auto'}" + (f" @ {rf_data_date}" if rf_data_date else ""),
+                }
+                if rolling_std_latest is not None:
+                    sharpe_metrics['滚动标准差(末值)'] = f"{rolling_std_latest:.4f}"
+                if full_std is not None and not np.isnan(full_std):
+                    sharpe_metrics['全样本标准差'] = f"{float(full_std):.4f}"
+                if indicator_value is not None:
+                    sharpe_metrics['当前滚动Sharpe(年化)'] = f"{indicator_value:.3f}"
+                if sharpe_full_value is not None:
+                    sharpe_metrics['全样本Sharpe(年化)'] = f"{sharpe_full_value:.3f}"
+                sharpe_explain = (
+                    "<ul>"
+                    "<li><b>口径</b>：真实净值日收益率减去无风险日收益率（按净值末日向前取国债1Y利率），年化：均值÷标准差×√252，标准差使用样本标准差(ddof=1)。</li>"
+                    "<li><b>窗口</b>：默认60个交易日；样本不足时按样本量自适应，标准差为0时返回NaN以避免误判。</li>"
+                    "<li><b>无风险来源</b>：东财国债收益率表 EMM00166466（1Y），可用环境变量 <code>RISK_FREE_RATE</code> 覆盖。</li>"
+                    "<li><b>Hover信息</b>：每个点的Sharpe旁同步展示该窗口的收益率标准差。</li>"
+                    "</ul>"
+                )
+                self._save_figure_with_details(
+                    fig_sharpe,
+                    name='strategy_sharpe_nav',
+                    title='夏普比率（真实净值口径）',
+                    explanation_html=sharpe_explain,
+                    metrics=sharpe_metrics
+                )
             
             # 对比曲线：同日IC与RankIC（采样并对齐x轴）
             try:
@@ -805,6 +1008,7 @@ class LightweightAnalysis:
             <li><b>数据采样</b>: 若超过300个交易日，按步长采样保留250个点用于展示</li>
             <li><b>移动平均</b>: 计算10日滑动平均，最小窗口为1</li>
             <li><b>图表生成</b>: 使用Plotly生成时间序列图，包含原始IC和移动平均线</li>
+            <li><b>夏普计算</b>: 真实净值日收益率 - 无风险日收益率（按净值末日向前取国债1Y利率，当前 {risk_free_rate_annual*100:.2f}%@{rf_source if rf_source else 'auto'} {rf_data_date if rf_data_date else ''}），窗口内均值/标准差×√252；标准差为0时返回NaN。</li>
         </ol>
         <p><b>关键字段说明</b>:</p>
         <ul>
@@ -840,6 +1044,10 @@ class LightweightAnalysis:
             <li><b>关键洞察</b>: 观察IC与收益率的领先/滞后关系，验证模型预测的有效性</li>
         </ul>
         """
+        if sharpe_full_value is not None:
+            ic_metrics['夏普比率(年化,真实净值)'] = f"{sharpe_full_value:.3f}"
+        if rolling_sharpe_latest is not None:
+            ic_metrics['滚动Sharpe当前值'] = f"{rolling_sharpe_latest:.3f}"
         
         self._save_figure_with_details(
             fig_ic,
@@ -847,6 +1055,7 @@ class LightweightAnalysis:
             title='IC时间序列（含极端信号组追踪）',
             explanation_html=enhanced_ic_explain + data_processing_steps,
             metrics=ic_metrics,
+            extra_figs=extra_figs_for_ic,
         )
         
         # IC分布图 - 针对高质量模型优化版
@@ -6110,6 +6319,8 @@ class LightweightAnalysis:
                     _pairs['buy_timestamp'],
                     _pairs['sell_timestamp']
                 )
+                # 绝对收益，用于计算收益覆盖率所需持仓时间
+                _pairs['abs_profit'] = _pairs['absolute_profit'].abs().fillna(0)
                 # 计算“交易时段内”的持仓分钟数（跨日仅累计交易时段，周末/午休不计）
                 _pairs['open_date'] = _pd.to_datetime(_pairs['open_timestamp']).dt.date
                 _pairs['close_date'] = _pd.to_datetime(_pairs['close_timestamp']).dt.date
@@ -6166,6 +6377,31 @@ class LightweightAnalysis:
                     # 对齐主索引
                     _lower_series = _lower_series.reindex(_daily_holding.index)
                     _upper_series = _upper_series.reindex(_daily_holding.index)
+                # 计算每个买入日，累计绝对收益覆盖25%/50%/75%时对应的持仓分钟数
+                def _profit_cover_time(_g):
+                    _profit = _g['abs_profit'].to_numpy()
+                    _hold = _g['holding_minutes'].to_numpy()
+                    _total = _profit.sum()
+                    if _total <= 0 or _hold.size == 0:
+                        return _pd.Series({'p25_time': _np.nan, 'p50_time': _np.nan, 'p75_time': _np.nan})
+                    _order = _np.argsort(_hold)
+                    _profit_sorted = _profit[_order]
+                    _hold_sorted = _hold[_order]
+                    _cum = _np.cumsum(_profit_sorted) / _total
+                    def _find(_th):
+                        _idx = _np.searchsorted(_cum, _th, side='left')
+                        _idx = min(_idx, len(_hold_sorted) - 1)
+                        return float(_hold_sorted[_idx])
+                    return _pd.Series({
+                        'p25_time': _find(0.25),
+                        'p50_time': _find(0.50),
+                        'p75_time': _find(0.75)
+                    })
+                _profit_cover = _pairs.groupby('open_date').apply(_profit_cover_time)
+                if isinstance(_profit_cover.index, _pd.MultiIndex):
+                    _profit_cover.index = _profit_cover.index.get_level_values(0)
+                _profit_cover = _profit_cover.sort_index()
+                _profit_cover = _profit_cover.reindex(_daily_holding.index)
                 if len(_daily_holding) > 0:
                     # 采样以保证轻量
                     _series = _daily_holding
@@ -6205,6 +6441,22 @@ class LightweightAnalysis:
                             line=dict(color='darkorange', width=1.8, dash='dot'),
                             hovertemplate='日期: %{x}<br>最长5%平均: %{y:.1f} 分钟<extra></extra>'
                         ))
+                    # 收益覆盖率持仓时间曲线
+                    _cover_sample = _profit_cover.loc[_x_idx]
+                    for _col, _name, _color, _dash, _label in [
+                        ('p25_time', '收益25%覆盖持仓', '#2980b9', 'dash', '25%'),
+                        ('p50_time', '收益50%覆盖持仓', '#c0392b', 'longdash', '50%'),
+                        ('p75_time', '收益75%覆盖持仓', '#16a085', 'dot', '75%')
+                    ]:
+                        _vals = _cover_sample[_col].values
+                        fig_hold.add_trace(go.Scatter(
+                            x=_x,
+                            y=[None if _np.isnan(v) else float(v) for v in _vals],
+                            mode='lines',
+                            name=_name,
+                            line=dict(color=_color, width=1.5, dash=_dash),
+                            hovertemplate=f'日期: %{{x}}<br>达到累计{_label}收益的持仓: %{{y:.1f}} 分钟<extra></extra>'
+                        ))
                     _mean = _daily_holding.mean()
                     _p25 = _daily_holding.quantile(0.25)
                     _p75 = _daily_holding.quantile(0.75)
@@ -6216,7 +6468,8 @@ class LightweightAnalysis:
                     )
                     explain_html = (
                         "<p>基于 data/paired_trades_fifo.parquet 的配对交易；跨日交易仅累计交易时段(09:30-11:30, 13:00-15:00)，" \
-                        "周末与午间休市不计入。以开仓日为横轴，展示全体平均持仓分钟数，同时绘制每日股票层面持仓时间最短的5%与最长的5%的平均值曲线。</p>"
+                        "周末与午间休市不计入。以开仓日为横轴，展示全体平均持仓分钟数，同时绘制每日股票层面持仓时间最短的5%与最长的5%的平均值曲线，" \
+                        "以及累计绝对收益覆盖25%/50%/75%所需的持仓时间曲线，用于定位主要贡献收益的持仓时长。</p>"
                     )
                     metrics = {
                         '样本天数': f"{len(_daily_holding)}",
@@ -6224,6 +6477,13 @@ class LightweightAnalysis:
                         'P25/P50/P75(分钟)': f"{_p25:.1f} / {_daily_holding.median():.1f} / {_p75:.1f}",
                         '总配对数': f"{len(_pairs):,}"
                     }
+                    if not _profit_cover.empty:
+                        _cover_median = _profit_cover[['p25_time', 'p50_time', 'p75_time']].median()
+                        if _cover_median.notna().any():
+                            metrics['收益覆盖25/50/75%中位持仓(分钟)'] = " / ".join(
+                                "NA" if _np.isnan(_cover_median[_k]) else f"{_cover_median[_k]:.1f}"
+                                for _k in ['p25_time', 'p50_time', 'p75_time']
+                            )
                     self._save_figure_with_details(
                         fig_hold,
                         name='intraday_avg_holding_time_light',
@@ -7359,7 +7619,7 @@ class LightweightAnalysis:
             import traceback
             traceback.print_exc()
 
-    def _save_figure_with_details(self, fig, name: str, title: str, explanation_html: str, metrics: dict):
+    def _save_figure_with_details(self, fig, name: str, title: str, explanation_html: str, metrics: dict, extra_figs: Optional[List[Tuple[str, go.Figure]]] = None):
         """保存含说明与指标汇总的图表页面（轻量化）"""
         try:
             output_path = self.reports_dir / f"{name}.html"
@@ -7519,13 +7779,6 @@ class LightweightAnalysis:
                         return str(obj)
                 return obj
 
-            fig_json = fig.to_plotly_json()
-            fig_json_native = _to_native(fig_json)
-            fig_json_str = json.dumps(fig_json_native, ensure_ascii=False)
-            config_str = json.dumps(config, ensure_ascii=False)
-
-            # 保留容器，交由 Plotly 根据 layout.height 自动伸缩
-            height_px = fig_json_native.get('layout', {}).get('height', 500)
             tmpl = Template("""
             <div id="$div_id" class="plotly-graph-div" style="height:${height}px; width:100%;"></div>
             <script type="text/javascript">
@@ -7539,7 +7792,23 @@ class LightweightAnalysis:
                 })();
             </script>
             """)
-            fig_html = tmpl.substitute(div_id=name, height=height_px, fig_json=fig_json_str, config_json=config_str)
+
+            def _build_fig_html(fig_obj, div_id: str) -> str:
+                fig_json = fig_obj.to_plotly_json()
+                fig_json_native = _to_native(fig_json)
+                fig_json_str = json.dumps(fig_json_native, ensure_ascii=False)
+                config_str = json.dumps(config, ensure_ascii=False)
+                height_px = fig_json_native.get('layout', {}).get('height', 500)
+                return tmpl.substitute(div_id=div_id, height=height_px, fig_json=fig_json_str, config_json=config_str)
+
+            fig_html = _build_fig_html(fig, name)
+            if extra_figs:
+                extra_parts = []
+                for idx, (suffix, extra_fig) in enumerate(extra_figs, start=1):
+                    div_suffix = suffix if suffix else f"extra{idx}"
+                    div_id = f"{name}_{div_suffix}"
+                    extra_parts.append(f"<div style=\"margin-top:18px;\">{_build_fig_html(extra_fig, div_id)}</div>")
+                fig_html += "".join(extra_parts)
 
             # 指标表格HTML
             if metrics:
@@ -8547,6 +8816,7 @@ class LightweightAnalysis:
             },
             '📊 模型性能分析': {
                 'main': [
+                    ('strategy_sharpe_nav', '夏普比率（真实净值口径）'),
                     ('ic_timeseries_light', 'IC时间序列（含极端信号组追踪）'),
                     ('ic_stability_monthly_light', 'IC按月份稳定性（T+1）含极端信号组追踪'),
                 ],
@@ -8577,15 +8847,16 @@ class LightweightAnalysis:
                     ('amount_by_board_pie_light', '按交易所板块的交易/盈利占比（轻量化）'),
                 ]
             },
-            '⚡ 交易执行分析': {
-                'main': [
-                    ('fill_rate_timeseries_light', '成交率时间序列（轻量化）'),
-                ],
-                'sub': [
-                    ('intraday_avg_holding_time_light', '交易平均持仓时间（按买入日，按交易时段计）'),
-                    ('fill_rate_distribution_light', '成交率分布（轻量化）'),
-                ]
-            },
+                '⚡ 交易执行分析': {
+                    'main': [
+                        ('fill_rate_timeseries_light', '成交率时间序列（轻量化）'),
+                    ],
+                    'sub': [
+                        ('intraday_avg_holding_time_light', '交易平均持仓时间（按买入日，按交易时段计）'),
+                        ('fill_rate_distribution_light', '成交率分布（轻量化）'),
+                        ('entry_exit_rank_baostock_full', '择时能力分布（5min行情，全量）'),
+                    ]
+                },
             '💸 滑点成本分析': {
                 'main': [
                     ('total_cost_light', '综合交易成本分析（轻量化）'),
@@ -8613,6 +8884,16 @@ class LightweightAnalysis:
         }
         
         # 创建现有图表的映射
+        # 将外部生成的择时能力图表（baostock 5min 版本）纳入自助链接
+        extra_figs = [
+            ('entry_exit_rank_baostock_full', 'reports/entry_exit_rank_baostock_full.html'),
+            ('entry_exit_rank_baostock_full', 'docs/entry_exit_rank_baostock_full.html'),
+        ]
+        for name, path in extra_figs:
+            if name not in [n for n, _ in self.figures]:
+                if Path(path).exists():
+                    self.figures.append((name, path))
+
         available_figures = {name: path for name, path in self.figures}
         
         # 按分类生成图表 - 区分主图表和副图表布局
