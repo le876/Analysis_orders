@@ -29,6 +29,7 @@ from typing import Optional, List, Tuple
 import re
 import urllib.request
 from urllib.parse import quote
+import builtins
 
 # Windows 终端中文乱码修复与安全打印
 def _configure_windows_console_utf8() -> None:
@@ -57,14 +58,8 @@ _configure_windows_console_utf8()
 def _remap_symbols(text: str) -> str:
     """将控制台可能不支持的emoji替换为ASCII提示，避免乱码。
     仅影响终端打印，不影响HTML报告内容。
+    (已简化以修复语法错误)
     """
-    replacements = {
-        '🚀': '[START]', '🎯': '[TARGET]', '📊': '[INFO]', '📈': '[INFO]', '📉': '[INFO]',
-        '✅': '[OK]', '❌': '[ERR]', '⚠️': '[WARN]', '🔍': '[CHECK]', '🔄': '[STEP]',
-        '🎛️': '[DASH]', '⚡': '[FAST]', '💰': '[RET]', '📱': '[MOBILE]'
-    }
-    for k, v in replacements.items():
-        text = text.replace(k, v)
     return text
 
 def _print_dup(*args, **kwargs):  # type: ignore[override]
@@ -81,6 +76,23 @@ def _print_dup(*args, **kwargs):  # type: ignore[override]
         # 最后的兜底：强制以UTF-8字节写入
         sys.stdout.buffer.write((text + end).encode('utf-8', errors='replace'))
     sys.stdout.flush()
+
+# -------- 终端输出去除图标（仅保留纯文本，HTML 页面保留图标） --------
+_orig_print = builtins.print
+
+def _strip_icons(text: str) -> str:
+    """移除终端输出中的 FontAwesome 图标标签，保持纯文本可读性。"""
+    try:
+        return re.sub(r"<i class=['\"][^>]*></i>\s*", "", text)
+    except Exception:
+        return text
+
+def _print_no_icons(*args, **kwargs):
+    new_args = [_strip_icons(str(a)) for a in args]
+    _orig_print(*new_args, **kwargs)
+
+# 覆盖内置 print，确保所有终端日志不显示图标
+builtins.print = _print_no_icons
 
 
 class LightweightAnalysis:
@@ -103,6 +115,9 @@ class LightweightAnalysis:
         self._factor_build_meta: dict = {}
         self._credit_rules: dict = {}
         self._risk_free_cache: dict = {}
+        self._index_5m_cache_df: Optional[pd.DataFrame] = None
+        self._index_5m_source_tag: str = ''
+        self.strategy_metrics: dict = {}
 
     # ------------------------------------------------------------------
     # 无风险利率获取（按策略末日对齐）
@@ -163,7 +178,7 @@ class LightweightAnalysis:
                     source = "eastmoney_treasury_1y"
                     data_date = row.get("SOLAR_DATE")
         except Exception as e:
-            print(f"⚠️ 在线获取无风险利率失败，使用默认值2%: {e}")
+            print(f"<i class='fas fa-exclamation-triangle text-yellow-500'></i> 在线获取无风险利率失败，使用默认值2%: {e}")
 
         # 写缓存
         try:
@@ -314,16 +329,16 @@ class LightweightAnalysis:
         base_dir.mkdir(parents=True, exist_ok=True)
         local_script = base_dir / 'tex-chtml-full.js'
         if not local_script.exists():
-            print('⚠️ 本地缺少 MathJax，尝试从 CDN 下载...')
+            print("<i class='fas fa-exclamation-triangle text-yellow-500'></i> 本地缺少 MathJax，尝试从 CDN 下载...")
             try:
                 url = 'https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-chtml-full.js'
                 with urllib.request.urlopen(url, timeout=20) as resp:
                     data = resp.read()
                 local_script.write_bytes(data)
                 size_mb = len(data) / (1024 * 1024)
-                print(f'   ✅ MathJax 已下载 ({size_mb:.2f} MB) -> {local_script}')
+                print(f"   <i class='fas fa-check-circle text-green-500'></i> MathJax 已下载 ({size_mb:.2f} MB) -> {local_script}")
             except Exception as exc:
-                print(f'   ⚠️ MathJax 下载失败: {exc}')
+                print(f"   <i class='fas fa-exclamation-triangle text-yellow-500'></i> MathJax 下载失败: {exc}")
         try:
             rel_path = os.path.relpath(local_script, start=self.reports_dir)
         except Exception:
@@ -332,13 +347,13 @@ class LightweightAnalysis:
 
     def load_and_sample_data(self):
         """加载并智能采样数据"""
-        print("🔄 加载数据...")
+        print("<i class='fas fa-sync-alt text-blue-500'></i> 加载数据...")
         self.df = pd.read_parquet(self.data_path, engine='pyarrow')
         original_size = len(self.df)
-        print(f"📊 原始数据: {original_size:,} 行")
+        print(f"<i class='fas fa-chart-bar text-indigo-500'></i> 原始数据: {original_size:,} 行")
         
         # 保留全量原始样本，后续在聚合结果中控制异常对统计的影响
-        print("🧹 数据检查...")
+        print("<i class='fas fa-broom text-gray-400'></i> 数据检查...")
         print(f"real字段范围: {self.df['real'].min():.2f} 到 {self.df['real'].max():.2f}")
         real_mean = self.df['real'].mean()
         real_std = self.df['real'].std()
@@ -351,14 +366,14 @@ class LightweightAnalysis:
         if 'tradeTimestamp' in self.df.columns:
             self.df['tradeTimestamp'] = pd.to_datetime(self.df['tradeTimestamp'])
             
-        print(f"✅ 数据准备完成")
+        print(f"<i class='fas fa-check-circle text-green-500'></i> 数据准备完成")
         
         # 加载基准指数数据
         self.load_benchmark_data()
         
     def load_benchmark_data(self):
         """加载基准指数数据"""
-        print("📈 加载基准指数数据...")
+        print("<i class='fas fa-chart-line text-green-500'></i> 加载基准指数数据...")
         
         benchmark_files = {
             '创业板指数': 'sz_399006_daily_2024.csv',
@@ -379,7 +394,7 @@ class LightweightAnalysis:
                     
                     # 检查并修复收盘价数据
                     if 'close' not in df.columns:
-                        print(f"❌ {name}: 缺少close列")
+                        print(f"<i class='fas fa-times-circle text-red-500'></i> {name}: 缺少close列")
                         continue
                         
                     # 处理缺失值和异常值
@@ -387,7 +402,7 @@ class LightweightAnalysis:
                     df = df.dropna(subset=['close'])
                     
                     if len(df) == 0:
-                        print(f"❌ {name}: 收盘价数据全部缺失")
+                        print(f"<i class='fas fa-times-circle text-red-500'></i> {name}: 收盘价数据全部缺失")
                         continue
                     
                     # 计算日收益率：(今日收盘价 - 昨日收盘价) / 昨日收盘价
@@ -402,27 +417,300 @@ class LightweightAnalysis:
                     expected_return = (end_price / start_price) - 1
                     calculated_return = df['cumulative_return'].iloc[-1]
                     
-                    print(f"✅ {name}: {len(df)} 条记录")
+                    print(f"<i class='fas fa-check-circle text-green-500'></i> {name}: {len(df)} 条记录")
                     print(f"   起始价格: {start_price:.2f}, 结束价格: {end_price:.2f}")
                     print(f"   计算收益: {calculated_return*100:.2f}%, 验证收益: {expected_return*100:.2f}%")
                     
                     self.benchmark_data[name] = df
                     
                 except Exception as e:
-                    print(f"⚠️ 加载 {name} 失败: {e}")
+                    print(f"<i class='fas fa-exclamation-triangle text-yellow-500'></i> 加载 {name} 失败: {e}")
                     import traceback
                     traceback.print_exc()
             else:
-                print(f"⚠️ 文件不存在: {filepath}")
+                print(f"<i class='fas fa-exclamation-triangle text-yellow-500'></i> 文件不存在: {filepath}")
                 
         if not self.benchmark_data:
-            print("❌ 未能加载任何基准数据，将跳过基准对比分析")
+            print("<i class='fas fa-times-circle text-red-500'></i> 未能加载任何基准数据，将跳过基准对比分析")
         else:
-            print(f"✅ 成功加载 {len(self.benchmark_data)} 个基准指数")
+            print(f"<i class='fas fa-check-circle text-green-500'></i> 成功加载 {len(self.benchmark_data)} 个基准指数")
+
+    def _format_intraday_time(self, t_val) -> str:
+        """将各种格式的时间字段规范为 HH:MM:SS。"""
+        digits = ''.join(ch for ch in str(t_val) if ch.isdigit())
+        if len(digits) >= 14:
+            time_part = digits[8:14]
+        elif len(digits) >= 8:
+            time_part = digits[:6]
+        elif len(digits) >= 6:
+            time_part = digits[-6:]
+        else:
+            time_part = digits.zfill(6)
+        time_part = time_part.zfill(6)
+        return f"{time_part[:2]}:{time_part[2:4]}:{time_part[4:]}"
+
+    def _normalize_index_5m_df(self, df: Optional[pd.DataFrame]) -> Optional[pd.DataFrame]:
+        """标准化指数5m行情列，兼容 baostock / akshare / tushare 字段。"""
+        if df is None:
+            return None
+        if isinstance(df, pd.Series):
+            df = df.to_frame().T
+        if not isinstance(df, pd.DataFrame):
+            return None
+        df = df.copy()
+        # 列名统一
+        rename_map = {
+            '时间': 'datetime',
+            '交易时间': 'datetime',
+            'trade_time': 'datetime',
+            'timestamp': 'datetime',
+            'date_time': 'datetime',
+            '日期': 'date',
+            '时间戳': 'time',
+            'time': 'time',
+            'open_price': 'open',
+            'close_price': 'close',
+            'high_price': 'high',
+            'low_price': 'low',
+            'vol': 'volume',
+            '成交量': 'volume',
+            '成交量(手)': 'volume',
+            '成交额': 'amount',
+            '成交额(元)': 'amount',
+        }
+        for src, dst in rename_map.items():
+            if src in df.columns and dst not in df.columns:
+                df = df.rename(columns={src: dst})
+
+        # 若有 date + time 字段，则组合为 datetime
+        if 'datetime' not in df.columns:
+            if {'date', 'time'}.issubset(df.columns):
+                try:
+                    df['datetime'] = [
+                        f"{d} {self._format_intraday_time(t)}" for d, t in zip(df['date'], df['time'])
+                    ]
+                except Exception:
+                    pass
+        if 'datetime' not in df.columns and 'trade_time' in rename_map and 'trade_time' in df.columns:
+            df['datetime'] = df['trade_time']
+        if 'datetime' not in df.columns:
+            return None
+
+        df['datetime'] = pd.to_datetime(df['datetime'], errors='coerce')
+        df = df.dropna(subset=['datetime'])
+
+        price_candidates = {
+            'open': ['开盘', 'open', 'Open'],
+            'high': ['最高', 'high', 'High'],
+            'low': ['最低', 'low', 'Low'],
+            'close': ['收盘', 'close', 'Close', 'price', 'last'],
+            'volume': ['volume'],
+            'amount': ['amount'],
+        }
+        for std_name, options in price_candidates.items():
+            if std_name in df.columns:
+                continue
+            for opt in options:
+                if opt in df.columns:
+                    df = df.rename(columns={opt: std_name})
+                    break
+
+        for col in ['open', 'high', 'low', 'close', 'volume', 'amount']:
+            if col in df.columns:
+                df[col] = pd.to_numeric(df[col], errors='coerce')
+
+        keep_cols = ['datetime'] + [c for c in ['open', 'high', 'low', 'close', 'volume', 'amount'] if c in df.columns]
+        df = df[keep_cols]
+        df = df.sort_values('datetime').drop_duplicates(subset=['datetime'], keep='last')
+        return df if len(df) > 0 else None
+
+    def _fetch_index_5m_online(self, start_dt: Optional[pd.Timestamp], end_dt: Optional[pd.Timestamp]) -> Tuple[Optional[pd.DataFrame], str]:
+        """尝试在线抓取沪深300指数5分钟数据，返回标准化行情和数据源标签。"""
+        start_dt = pd.to_datetime(start_dt) if start_dt is not None else None
+        end_dt = pd.to_datetime(end_dt) if end_dt is not None else None
+        if start_dt is not None and end_dt is not None and end_dt < start_dt:
+            end_dt = start_dt
+        start_date = start_dt.strftime('%Y-%m-%d') if start_dt is not None else None
+        end_date = end_dt.strftime('%Y-%m-%d') if end_dt is not None else None
+
+        proxy_backup = {}
+        proxy_keys = ['HTTP_PROXY', 'HTTPS_PROXY', 'http_proxy', 'https_proxy']
+        for k in proxy_keys:
+            if k in os.environ:
+                proxy_backup[k] = os.environ[k]
+                os.environ.pop(k, None)
+
+        try:
+            # 1) baostock（无需 Token）
+            try:
+                import baostock as bs  # type: ignore
+                print("<i class='fas fa-plug text-blue-500'></i> 尝试通过 baostock 获取沪深300 5分钟数据...")
+                lg = bs.login()
+                if lg.error_code != '0':
+                    raise RuntimeError(f"baostock 登录失败: {lg.error_msg}")
+                fields = "date,time,open,high,low,close,volume,amount"
+                bs_codes = [
+                    ("sh.000300", "沪深300指数"),
+                    ("sh.510300", "沪深300ETF(510300)"),
+                    ("sz.159919", "沪深300ETF(159919)"),
+                ]
+                try:
+                    for code, tag in bs_codes:
+                        rs = bs.query_history_k_data_plus(
+                            code,
+                            fields,
+                            start_date=start_date,
+                            end_date=end_date,
+                            frequency="5"
+                        )
+                        data = []
+                        while rs.error_code == '0' and rs.next():
+                            data.append(rs.get_row_data())
+                        if data:
+                            bdf = pd.DataFrame(data, columns=rs.fields)
+                            bdf['datetime'] = pd.to_datetime(
+                                bdf['date'].astype(str) + ' ' + bdf['time'].apply(self._format_intraday_time),
+                                errors='coerce'
+                            )
+                            bdf[['open', 'high', 'low', 'close', 'volume', 'amount']] = bdf[['open', 'high', 'low', 'close', 'volume', 'amount']].apply(pd.to_numeric, errors='coerce')
+                            bdf = bdf[['datetime', 'open', 'high', 'low', 'close', 'volume', 'amount']]
+                            bdf = self._normalize_index_5m_df(bdf)
+                            if bdf is not None and len(bdf):
+                                print(f"<i class='fas fa-check-circle text-green-500'></i> baostock {tag} 获得 {len(bdf):,} 条5m 数据")
+                                return bdf, f'baostock_{code}'
+                        else:
+                            print(f"<i class='fas fa-exclamation-triangle text-yellow-500'></i> baostock {tag} 返回为空")
+                finally:
+                    bs.logout()
+            except Exception as exc:
+                print(f"<i class='fas fa-exclamation-triangle text-yellow-500'></i> baostock 5m 抓取失败: {exc}")
+
+            # 2) akshare（无需 Token）
+            try:
+                import akshare as ak  # type: ignore
+                print("<i class='fas fa-plug text-blue-500'></i> 尝试通过 akshare 获取沪深300 5分钟数据...")
+                kwargs = {
+                    'symbol': 'sh000300',
+                    'period': '5'
+                }
+                if start_dt is not None:
+                    kwargs['start_date'] = start_dt.strftime('%Y-%m-%d %H:%M:%S')
+                if end_dt is not None:
+                    kwargs['end_date'] = end_dt.strftime('%Y-%m-%d %H:%M:%S')
+                adf = ak.index_zh_a_hist_min_em(**kwargs)  # type: ignore
+                adf = adf.rename(columns={
+                    '时间': 'datetime',
+                    '开盘': 'open',
+                    '最高': 'high',
+                    '最低': 'low',
+                    '收盘': 'close',
+                    '成交量': 'volume',
+                    '成交额': 'amount',
+                })
+                adf = self._normalize_index_5m_df(adf)
+                if adf is not None and len(adf):
+                    print(f"<i class='fas fa-check-circle text-green-500'></i> akshare 获得 {len(adf):,} 条沪深300 5m 数据")
+                    return adf, 'akshare_sh000300'
+                else:
+                    print("<i class='fas fa-exclamation-triangle text-yellow-500'></i> akshare 返回为空")
+            except Exception as exc:
+                print(f"<i class='fas fa-exclamation-triangle text-yellow-500'></i> akshare 5m 抓取失败: {exc}")
+
+            # 3) tushare（需要 Token）
+            token = os.environ.get('TUSHARE_TOKEN') or os.environ.get('ts_token') or os.environ.get('TS_TOKEN')
+            if token:
+                try:
+                    import tushare as ts  # type: ignore
+                    print("<i class='fas fa-plug text-blue-500'></i> 尝试通过 tushare 获取沪深300 5分钟数据...")
+                    pro = ts.pro_api(token)
+                    params = {'ts_code': '000300.SH', 'freq': '5min'}
+                    if start_dt is not None:
+                        params['start_date'] = start_dt.strftime('%Y%m%d')
+                    if end_dt is not None:
+                        params['end_date'] = end_dt.strftime('%Y%m%d')
+                    tdf = pro.index_min(**params)  # type: ignore
+                    tdf = self._normalize_index_5m_df(tdf)
+                    if tdf is not None and len(tdf):
+                        print(f"<i class='fas fa-check-circle text-green-500'></i> tushare 获得 {len(tdf):,} 条沪深300 5m 数据")
+                        return tdf, 'tushare_000300.SH'
+                    else:
+                        print("<i class='fas fa-exclamation-triangle text-yellow-500'></i> tushare 返回为空")
+                except Exception as exc:
+                    print(f"<i class='fas fa-exclamation-triangle text-yellow-500'></i> tushare 5m 抓取失败: {exc}")
+            else:
+                print("<i class='fas fa-exclamation-triangle text-yellow-500'></i> 未检测到 TUSHARE_TOKEN，跳过 tushare 抓取")
+
+            return None, 'unknown'
+        finally:
+            for k, v in proxy_backup.items():
+                os.environ[k] = v
+
+    def _get_index_5m_returns(self, start_dt: Optional[pd.Timestamp], end_dt: Optional[pd.Timestamp]) -> Tuple[Optional[pd.DataFrame], str]:
+        """确保指数5m数据可用，返回 datetime/idx_ret 与数据源标签。"""
+        path = Path('data/index_5m_cache.parquet')
+        idx_df = self._index_5m_cache_df.copy() if self._index_5m_cache_df is not None else None
+        source_tag = self._index_5m_source_tag or 'index_5m_cache'
+        if idx_df is None:
+            try:
+                if path.exists():
+                    idx_df = pd.read_parquet(path)
+                    source_tag = 'index_5m_cache'
+            except Exception as exc:
+                print(f"<i class='fas fa-exclamation-triangle text-yellow-500'></i> 读取 {path} 失败: {exc}")
+                idx_df = None
+
+        idx_df = self._normalize_index_5m_df(idx_df)
+        need_fetch = idx_df is None or len(idx_df) == 0
+        if not need_fetch and start_dt is not None and end_dt is not None:
+            try:
+                start_dt = pd.to_datetime(start_dt)
+                end_dt = pd.to_datetime(end_dt)
+                margin = pd.Timedelta(minutes=5)
+                cover_min = idx_df['datetime'].min() - margin
+                cover_max = idx_df['datetime'].max() + margin
+                if start_dt < cover_min or end_dt > cover_max:
+                    need_fetch = True
+            except Exception:
+                need_fetch = True
+
+        if need_fetch:
+            fetched_df, fetched_source = self._fetch_index_5m_online(start_dt, end_dt)
+            if fetched_df is not None and len(fetched_df):
+                if idx_df is not None and len(idx_df):
+                    idx_df = pd.concat([idx_df, fetched_df], ignore_index=True)
+                else:
+                    idx_df = fetched_df
+                idx_df = self._normalize_index_5m_df(idx_df)
+                source_tag = fetched_source or source_tag
+                try:
+                    if idx_df is not None:
+                        idx_df.to_parquet(path, index=False)
+                        print(f"<i class='fas fa-save text-green-500'></i> 指数5m数据已写入 {path}（{len(idx_df):,} 行）")
+                except Exception as exc:
+                    print(f"<i class='fas fa-exclamation-triangle text-yellow-500'></i> 写入 {path} 失败: {exc}")
+
+        if idx_df is None or len(idx_df) == 0 or 'close' not in idx_df.columns:
+            return None, source_tag
+
+        idx_df = idx_df.sort_values('datetime')
+        idx_df['idx_ret'] = idx_df['close'].pct_change()
+        # 缓存到实例，避免重复 IO
+        self._index_5m_cache_df = idx_df.copy()
+        self._index_5m_source_tag = source_tag
+
+        if start_dt is not None and end_dt is not None:
+            try:
+                start_dt = pd.to_datetime(start_dt)
+                end_dt = pd.to_datetime(end_dt)
+                idx_df = idx_df[(idx_df['datetime'] >= start_dt - pd.Timedelta(minutes=5)) & (idx_df['datetime'] <= end_dt + pd.Timedelta(minutes=5))]
+            except Exception:
+                pass
+
+        return idx_df[['datetime', 'idx_ret']], source_tag
         
     def model_performance_analysis(self):
         """轻量级模型性能分析"""
-        print("\n🎯 === 模型性能分析 (轻量级) ===")
+        print("\n<i class='fas fa-bullseye text-red-500'></i> === 模型性能分析 (轻量级) ===")
         data_processing_steps = ""
         risk_free_rate_annual = 0.02
         rf_source = "fallback_default"
@@ -444,7 +732,7 @@ class LightweightAnalysis:
         required_cols = ['Code', 'Timestamp', 'pred', 'real']
         missing_cols = [c for c in required_cols if c not in self.df.columns]
         if missing_cols:
-            print(f"❌ 缺少必要列: {missing_cols}")
+            print(f"<i class='fas fa-times-circle text-red-500'></i> 缺少必要列: {missing_cols}")
             return
         data = self.df[required_cols].dropna().copy()
         data['Timestamp'] = pd.to_datetime(data['Timestamp'])
@@ -486,7 +774,7 @@ class LightweightAnalysis:
         ic_explain = "<p>无有效IC数据进行分析</p>"
         
         if len(daily_ic) == 0:
-            print("⚠️ 横截面IC样本不足，生成占位说明")
+            print("<i class='fas fa-exclamation-triangle text-yellow-500'></i> 横截面IC样本不足，生成占位说明")
             fig_placeholder = go.Figure()
             fig_placeholder.add_annotation(
                 text="暂无可用于计算IC的样本",
@@ -539,10 +827,10 @@ class LightweightAnalysis:
             if len(daily_ic) > 300:  # 超过300个交易日则采样
                 step = max(1, len(daily_ic) // 250)  # 保留250个点
                 daily_ic_sampled = daily_ic.iloc[::step]
-                print(f"📉 IC数据采样: {len(daily_ic)} -> {len(daily_ic_sampled)} 个点")
+                print(f"<i class='fas fa-chart-line-down text-red-500'></i> IC数据采样: {len(daily_ic)} -> {len(daily_ic_sampled)} 个点")
             else:
                 daily_ic_sampled = daily_ic
-                print(f"📊 IC数据无需采样: {len(daily_ic)} 个点")
+                print(f"<i class='fas fa-chart-bar text-indigo-500'></i> IC数据无需采样: {len(daily_ic)} 个点")
                 
             # 创建图表 - 彻底修复版本
             fig_ic = go.Figure()
@@ -554,7 +842,7 @@ class LightweightAnalysis:
             
             # 验证移动平均是否有差异
             diff_check = (daily_ic_sampled - rolling_mean).abs().max()
-            print(f"📊 IC与10日均线最大差异: {diff_check:.6f}")
+            print(f"<i class='fas fa-chart-bar text-indigo-500'></i> IC与10日均线最大差异: {diff_check:.6f}")
             plot_ic_series = self._winsorize_series(daily_ic_sampled)
             plot_rolling_series = self._winsorize_series(rolling_mean)
             
@@ -588,7 +876,7 @@ class LightweightAnalysis:
             ))
             
             # 添加G1和G10组的日度IC追踪
-            print("📊 为IC时间序列添加G1和G10组日度追踪...")
+            print("<i class='fas fa-chart-bar text-indigo-500'></i> 为IC时间序列添加G1和G10组日度追踪...")
             try:
                 # 计算每日的G1和G10组IC（复用后面的函数逻辑）
                 def calculate_extreme_groups_ic_for_timeseries(df_next):
@@ -662,10 +950,10 @@ class LightweightAnalysis:
                 print(f"   G10组日度IC范围: {g10_ic_daily.min():.4f} 到 {g10_ic_daily.max():.4f}")
                 
             except Exception as e:
-                print(f"   ⚠️ G1/G10组IC追踪添加失败: {e}")
+                print(f"   <i class='fas fa-exclamation-triangle text-yellow-500'></i> G1/G10组IC追踪添加失败: {e}")
             
             # 添加收益率最高日和最低日的标注线
-            print("📊 添加极端收益日标注线...")
+            print("<i class='fas fa-chart-bar text-indigo-500'></i> 添加极端收益日标注线...")
             try:
                 # 获取盯市分析的日收益率数据来识别极端收益日
                 mtm_file = Path("mtm_analysis_results/daily_nav_revised.csv")
@@ -742,19 +1030,19 @@ class LightweightAnalysis:
                         borderwidth=1
                     )
                     
-                    print(f"   ✅ 添加标注线: 收益最高日({max_date_str}, {max_return_value*100:.2f}%)")
-                    print(f"   ✅ 添加标注线: 收益最低日({min_date_str}, {min_return_value*100:.2f}%)")
+                    print(f"   <i class='fas fa-check-circle text-green-500'></i> 添加标注线: 收益最高日({max_date_str}, {max_return_value*100:.2f}%)")
+                    print(f"   <i class='fas fa-check-circle text-green-500'></i> 添加标注线: 收益最低日({min_date_str}, {min_return_value*100:.2f}%)")
                     
                 else:
-                    print("   ⚠️ 未找到盯市分析结果文件，跳过极端日标注")
+                    print("   <i class='fas fa-exclamation-triangle text-yellow-500'></i> 未找到盯市分析结果文件，跳过极端日标注")
                     
             except Exception as e:
-                print(f"   ⚠️ 极端收益日标注添加失败: {e}")
+                print(f"   <i class='fas fa-exclamation-triangle text-yellow-500'></i> 极端收益日标注添加失败: {e}")
                 import traceback
                 traceback.print_exc()
             
             # 添加日度绝对盈利数据到图表中（默认隐藏）
-            print("📊 添加日度绝对盈利数据...")
+            print("<i class='fas fa-chart-bar text-indigo-500'></i> 添加日度绝对盈利数据...")
             try:
                 # 获取盯市分析的日度绝对盈利数据
                 mtm_file = Path("mtm_analysis_results/daily_nav_revised.csv")
@@ -809,13 +1097,13 @@ class LightweightAnalysis:
                     ))
                     
                     profit_trace_idx = len(fig_ic.data) - 1
-                    print(f"   ✅ 添加日度绝对盈利数据: {len(profit_sampled)} 个点")
+                    print(f"   <i class='fas fa-check-circle text-green-500'></i> 添加日度绝对盈利数据: {len(profit_sampled)} 个点")
                     
                 else:
-                    print("   ⚠️ 未找到盯市分析结果文件，跳过绝对盈利数据")
+                    print("   <i class='fas fa-exclamation-triangle text-yellow-500'></i> 未找到盯市分析结果文件，跳过绝对盈利数据")
                     
             except Exception as e:
-                print(f"   ⚠️ 添加日度绝对盈利数据失败: {e}")
+                print(f"   <i class='fas fa-exclamation-triangle text-yellow-500'></i> 添加日度绝对盈利数据失败: {e}")
 
             # Sharpe 可视化（真实净值口径，按末日对齐无风险利率）
             if return_series_full is not None and len(return_series_full.dropna()) > 10:
@@ -998,7 +1286,7 @@ class LightweightAnalysis:
             # 添加详细的数据处理过程说明
             data_processing_steps = """
         <div style="margin-top: 30px; padding: 15px; background-color: #f8f9fa; border-left: 4px solid #17a2b8;">
-        <h4>📋 数据处理详细过程</h4>
+        <h4><i class='fas fa-clipboard-list text-blue-500'></i> 数据处理详细过程</h4>
         <ol>
             <li><b>数据源</b>: orders.parquet文件中的 <code>pred</code> 和 <code>real</code> 字段</li>
             <li><b>预处理</b>: 移除 <code>pred</code> 和 <code>real</code> 字段的缺失值</li>
@@ -1021,21 +1309,21 @@ class LightweightAnalysis:
         
         # 更新说明，包含极端信号组信息和标注线说明
         enhanced_ic_explain = ic_explain + """
-        <h4>🎯 新增：极端信号组日度追踪</h4>
+        <h4><i class='fas fa-bullseye text-red-500'></i> 新增：极端信号组日度追踪</h4>
         <ul>
             <li><b>G1组IC（红色虚线）</b>: pred值最低的10%股票的日度IC表现（做空信号）</li>
             <li><b>G10组IC（绿色虚线）</b>: pred值最高的10%股票的日度IC表现（做多信号）</li>
             <li><b>核心假设</b>: 如果模型对极端信号有效，G1和G10组的IC应该显著高于全市场IC</li>
             <li><b>实战意义</b>: 帮助识别模型在哪些时间段对极端信号最有效，指导仓位管理</li>
         </ul>
-        <h4>📍 新增：极端收益日标注</h4>
+        <h4><i class='fas fa-map-marker-alt text-red-500'></i> 新增：极端收益日标注</h4>
         <ul>
             <li><b>黑色虚线</b>: 标注策略收益率最高日和最低日的位置</li>
             <li><b>关键观察</b>: 在这些极端收益日，各组IC的表现如何？</li>
             <li><b>验证假设</b>: 在收益最高日，G10组IC是否表现优异？在收益最低日，模型表现如何？</li>
             <li><b>投资洞察</b>: 理解模型在市场极端情况下的预测能力</li>
         </ul>
-        <h4>🔄 新增：IC与收益率关系分析</h4>
+        <h4><i class='fas fa-sync-alt text-blue-500'></i> 新增：IC与收益率关系分析</h4>
         <ul>
             <li><b>交互式按钮</b>: 使用图表上方的按钮切换显示模式</li>
             <li><b>"仅显示IC"</b>: 只显示IC相关曲线，专注于模型预测能力分析</li>
@@ -1059,12 +1347,12 @@ class LightweightAnalysis:
         )
         
         # IC分布图 - 针对高质量模型优化版
-        print("📊 生成IC分布图...")
+        print("<i class='fas fa-chart-bar text-indigo-500'></i> 生成IC分布图...")
         
         # 确保使用正确的IC数据
         ic_values = daily_ic.values.astype(float)
         ic_values_plot = self._winsorize_series(pd.Series(ic_values))
-        print(f"📊 IC分布数据: {len(ic_values)}个值, 范围{ic_values.min():.4f}到{ic_values.max():.4f}")
+        print(f"<i class='fas fa-chart-bar text-indigo-500'></i> IC分布数据: {len(ic_values)}个值, 范围{ic_values.min():.4f}到{ic_values.max():.4f}")
         print(f'   展示范围经 winsorize: {ic_values_plot.min():.4f} 到 {ic_values_plot.max():.4f}')
         
         fig_ic_dist = go.Figure()
@@ -1145,9 +1433,9 @@ class LightweightAnalysis:
         ic_abs_mean = np.abs(ic_values).mean()
 
         # 确定警告级别
-        warning_level = "🚨 严重异常" if positive_ic_ratio > 0.8 else \
-                       "⚠️ 需要关注" if positive_ic_ratio > 0.7 else \
-                       "✅ 相对正常"
+        warning_level = "<i class='fas fa-bell text-red-600'></i> 严重异常" if positive_ic_ratio > 0.8 else \
+                       "<i class='fas fa-exclamation-triangle text-yellow-500'></i> 需要关注" if positive_ic_ratio > 0.7 else \
+                       "<i class='fas fa-check-circle text-green-500'></i> 相对正常"
 
         # 生成诊断报告
         quality_issues = []
@@ -1190,8 +1478,8 @@ class LightweightAnalysis:
         if quality_issues:
             diagnosis_points = [f"• {msg}" for msg in quality_issues]
         diagnosis_text = (
-            "<b>⭐ 数据质量诊断:</b><br>" + "<br>".join(diagnosis_points)
-        ) if diagnosis_points else "<b>⭐ 数据质量诊断:</b><br>未发现明显异常"
+            "<b><i class='fas fa-star text-yellow-400'></i> 数据质量诊断:</b><br>" + "<br>".join(diagnosis_points)
+        ) if diagnosis_points else "<b><i class='fas fa-star text-yellow-400'></i> 数据质量诊断:</b><br>未发现明显异常"
         fig_ic_dist.add_annotation(
             xref='paper', yref='paper', x=0.98, y=0.02,
             xanchor='right', yanchor='bottom',
@@ -1207,7 +1495,7 @@ class LightweightAnalysis:
             problems_html = "".join([f"<li><strong>{msg}</strong></li>" for msg in quality_issues])
             ic_dist_explain = f"""
             <div style=\"margin: 20px 0; padding: 15px; background-color: #f8f9fa; border-left: 4px solid #dc3545;\">
-            <h4>🚨 重要提示：IC分布异常分析</h4>
+            <h4><i class='fas fa-bell text-red-600'></i> 重要提示：IC分布异常分析</h4>
             <p><strong>当前数据显示的问题：</strong></p>
                 <ul>{problems_html}</ul>
             <p><strong>可能的原因：</strong></p>
@@ -1222,7 +1510,7 @@ class LightweightAnalysis:
         else:
             ic_dist_explain = f"""
             <div style=\"margin: 20px 0; padding: 15px; background-color: #f5fff5; border-left: 4px solid #28a745;\">
-                <h4>✅ IC分布诊断：相对正常</h4>
+                <h4><i class='fas fa-check-circle text-green-500'></i> IC分布诊断：相对正常</h4>
                 <ul>
                     <li>正IC比例：{positive_ic_ratio:.1%}；负IC比例：{negative_ic_ratio:.1%}</li>
                     <li>均值±标准差：{ic_mean:.4f} ± {ic_std:.4f}</li>
@@ -1233,7 +1521,7 @@ class LightweightAnalysis:
         
         # 统一的技术解读（保留，但不带"异常"措辞）
         ic_dist_explain += f"""
-        <h4>📊 IC分布技术解读</h4>
+        <h4><i class='fas fa-chart-bar text-indigo-500'></i> IC分布技术解读</h4>
             <ul>
                 <li><strong>IC定义</strong>: Information Coefficient，每个交易日横截面上预测值与实际收益的皮尔逊相关系数</li>
                 <li><strong>统计特征</strong>: 
@@ -1267,7 +1555,7 @@ class LightweightAnalysis:
         )
 
         # ============== 分段稳定性：月份/行情/行业（联动RankIC(T+1)) ==============
-        print("📊 生成分段稳定性图表（月份/行情/行业）...")
+        print("<i class='fas fa-chart-bar text-indigo-500'></i> 生成分段稳定性图表（月份/行情/行业）...")
 
         # 1) 按月份稳定性（T+1 IC 与 RankIC）
         ic_next_dt = pd.Series(ic_next.values, index=pd.to_datetime(ic_next.index)).sort_index()
@@ -1276,7 +1564,7 @@ class LightweightAnalysis:
         rank_month = rank_ic_next_dt.resample('M').mean()
 
         # 按月份汇总IC与RankIC（T+1评估口径）
-        print("📊 计算按月份的IC与RankIC稳定性...")
+        print("<i class='fas fa-chart-bar text-indigo-500'></i> 计算按月份的IC与RankIC稳定性...")
         fig_month = go.Figure()
         y_ic_m = [float(v) if pd.notna(v) else None for v in ic_month.values]
         y_rank_m = [float(v) if pd.notna(v) else None for v in rank_month.values]
@@ -1304,7 +1592,7 @@ class LightweightAnalysis:
             pass
 
         # ===== 极端信号分位收益分析（闭环交易） =====
-        print("📊 计算极端信号组的闭环收益表现...")
+        print("<i class='fas fa-chart-bar text-indigo-500'></i> 计算极端信号组的闭环收益表现...")
         extreme_group_summary = None
         extreme_metrics = {}
         try:
@@ -1322,7 +1610,7 @@ class LightweightAnalysis:
             missing_short = short_mask & pairs['open_pred'].isna()
             orders_cache = None
             if missing_short.any():
-                print(f"   ⚠️ 空头开仓缺失预测值 {int(missing_short.sum()):,} 条，尝试回填...")
+                print(f"   <i class='fas fa-exclamation-triangle text-yellow-500'></i> 空头开仓缺失预测值 {int(missing_short.sum()):,} 条，尝试回填...")
                 orders_cache = pd.read_parquet('data/orders.parquet', columns=['Timestamp', 'Code', 'pred', 'direction'])
                 orders_cache['Timestamp'] = pd.to_datetime(orders_cache['Timestamp'])
                 dir_series = orders_cache['direction']
@@ -1341,7 +1629,7 @@ class LightweightAnalysis:
 
             long_mask = (pairs['trade_type'] == 'long') & pairs['open_pred'].isna()
             if long_mask.any():
-                print(f"   ⚠️ 多头开仓缺失预测值 {int(long_mask.sum()):,} 条，尝试回填...")
+                print(f"   <i class='fas fa-exclamation-triangle text-yellow-500'></i> 多头开仓缺失预测值 {int(long_mask.sum()):,} 条，尝试回填...")
                 if orders_cache is None:
                     orders_cache = pd.read_parquet('data/orders.parquet', columns=['Timestamp', 'Code', 'pred', 'direction'])
                     orders_cache['Timestamp'] = pd.to_datetime(orders_cache['Timestamp'])
@@ -1403,7 +1691,7 @@ class LightweightAnalysis:
                 f"{high_row['pred_group']}-{low_row['pred_group']}盈亏差(百万元)": f"{spread_profit/1e6:.3f}"
             }
         except Exception as e:
-            print(f"   ⚠️ 极端信号收益分析失败: {e}")
+            print(f"   <i class='fas fa-exclamation-triangle text-yellow-500'></i> 极端信号收益分析失败: {e}")
             extreme_group_summary = None
             extreme_metrics = {}
 
@@ -1553,14 +1841,14 @@ class LightweightAnalysis:
                 metrics={}
             )
             
-        print(f"✅ IC分析完成，平均IC: {daily_ic.mean():.4f}")
+        print(f"<i class='fas fa-check-circle text-green-500'></i> IC分析完成，平均IC: {daily_ic.mean():.4f}")
         
     def pred_real_relationship_analysis(self):
         """模型预测值与实际收益关系分析 - 基于完整交易的绝对收益分析"""
-        print("\n🎯 === 预测值与实际收益关系分析（基于完整交易绝对收益）===")
+        print("\n<i class='fas fa-bullseye text-red-500'></i> === 预测值与实际收益关系分析（基于完整交易绝对收益）===")
         
         # 1. 数据预处理（使用全量订单，避免采样导致配对失真）
-        print("🔍 准备分析数据...")
+        print("<i class='fas fa-search text-blue-400'></i> 准备分析数据...")
         required_cols = ['Code', 'direction', 'pred', 'real', 'price', 'tradeAmount', 'fee', 'tradeQty', 'Timestamp']
         try:
             raw_data = pd.read_parquet(self.data_path, columns=required_cols, engine='pyarrow')
@@ -1602,11 +1890,11 @@ class LightweightAnalysis:
                 use_cache = False
         
         if len(raw_data) == 0:
-            print("❌ 无有效数据进行分析")
+            print("<i class='fas fa-times-circle text-red-500'></i> 无有效数据进行分析")
             return
             
         # 2. 实现买卖订单配对算法（FIFO原则）
-        print("🔄 实现买卖订单配对算法...")
+        print("<i class='fas fa-sync-alt text-blue-500'></i> 实现买卖订单配对算法...")
         
         def pair_trades_fifo(stock_data):
             """
@@ -1737,7 +2025,7 @@ class LightweightAnalysis:
         
         # 3. 若无缓存则执行配对计算
         if not use_cache:
-            print("📊 按股票分组进行交易配对...")
+            print("<i class='fas fa-chart-bar text-indigo-500'></i> 按股票分组进行交易配对...")
             all_trade_pairs = []
             stock_codes = raw_data['Code'].unique()
             print(f"需要处理的股票数量: {len(stock_codes)}")
@@ -1751,7 +2039,7 @@ class LightweightAnalysis:
                 all_trade_pairs.extend(stock_pairs)
             print(f"完成交易配对，共生成 {len(all_trade_pairs)} 笔完整交易")
             if len(all_trade_pairs) == 0:
-                print("❌ 没有成功配对的完整交易")
+                print("<i class='fas fa-times-circle text-red-500'></i> 没有成功配对的完整交易")
                 return
             trades_df = pd.DataFrame(all_trade_pairs)
             # 保存缓存（高效列类型）
@@ -1902,7 +2190,7 @@ class LightweightAnalysis:
             print(f"[WARN] 未实现盈亏Recon计算失败: {e}")
         
         # 5. 按买入时的pred值分组
-        print("📈 按买入时pred值分组分析...")
+        print("<i class='fas fa-chart-line text-green-500'></i> 按买入时pred值分组分析...")
         n_groups = 10
         
         try:
@@ -1913,7 +2201,7 @@ class LightweightAnalysis:
                 duplicates='drop'
             )
         except ValueError as e:
-            print(f"⚠️ 分组时遇到问题: {e}")
+            print(f"<i class='fas fa-exclamation-triangle text-yellow-500'></i> 分组时遇到问题: {e}")
             trades_df['pred_group'] = pd.cut(
                 trades_df['buy_pred'], 
                 bins=n_groups, 
@@ -1942,7 +2230,7 @@ class LightweightAnalysis:
 
         
         # 7. 创建可视化图表
-        print("📊 生成可视化图表...")
+        print("<i class='fas fa-chart-bar text-indigo-500'></i> 生成可视化图表...")
         
         from plotly.subplots import make_subplots
         
@@ -2076,7 +2364,7 @@ class LightweightAnalysis:
             return "N/A"
 
         recon_explain_html = f"""
-        <h4>📌 未实现盈亏如何计算（Recon）</h4>
+        <h4><i class='fas fa-thumbtack text-red-400'></i> 未实现盈亏如何计算（Recon）</h4>
         <p><b>定义</b>：对每只 <code>Code</code>，先用 FIFO 将买卖配对得到已实现盈亏；剩余未被配对的头寸为未平仓部分，其估值采用期末价格近似（本实现使用该股票<strong>最后一笔订单的 <code>price</code> 字段</strong>作为期末价近似）。</p>
         <ol>
             <li><b>剩余头寸</b>：
@@ -2098,7 +2386,7 @@ class LightweightAnalysis:
         """
         
         explanation_html = f"""
-        <h4>🎯 基于完整交易的绝对收益分析说明</h4>
+        <h4><i class='fas fa-bullseye text-red-500'></i> 基于完整交易的绝对收益分析说明</h4>
         <ul>
             <li><b>分析目的</b>: 验证买入时的预测值与完整交易绝对收益的关系</li>
             <li><b>配对方法</b>: 采用FIFO（先进先出）原则配对买卖订单</li>
@@ -2106,7 +2394,7 @@ class LightweightAnalysis:
             <li><b>分组依据</b>: 按买入时的pred值将完整交易分为{n_groups}组</li>
             <li><b>相关性</b>: pred-real={correlation_pred_real:.4f}，pred-绝对收益={correlation_pred_profit:.4f}</li>
         </ul>
-        <h4>📊 结果解读</h4>
+        <h4><i class='fas fa-chart-bar text-indigo-500'></i> 结果解读</h4>
         <ul>
             <li><b>总交易对数</b>: {total_trades:,} 笔完整交易</li>
             <li><b>总绝对盈利</b>: {total_profit:.2f}（正值表示盈利，负值表示亏损）</li>
@@ -2117,7 +2405,7 @@ class LightweightAnalysis:
         
         pred_real_processing_steps = f"""
         <div style="margin-top: 30px; padding: 15px; background-color: #f8f9fa; border-left: 4px solid #17a2b8;">
-        <h4>📋 完整交易配对详细过程</h4>
+        <h4><i class='fas fa-clipboard-list text-blue-500'></i> 完整交易配对详细过程</h4>
         <ol>
             <li><b>数据预处理</b>: 提取买卖订单的关键字段（<code>Code</code>、<code>direction</code>、<code>pred</code>、<code>tradeAmount</code>、<code>fee</code>、<code>tradeQty</code>）</li>
             <li><b>按股票分组</b>: 分别处理每只 <code>Code</code> 的订单序列</li>
@@ -2152,32 +2440,32 @@ class LightweightAnalysis:
             metrics=pred_real_metrics
         )
         
-        print(f"✅ 基于完整交易的绝对收益分析完成")
-        print(f"  🔢 总交易对数: {total_trades:,}")
-        print(f"  💰 总绝对盈利: {total_profit:.2f}")
-        print(f"  📈 整体胜率: {overall_win_rate*100:.1f}%")
-        print(f"  📊 pred-real相关性: {correlation_pred_real:.4f}")
-        print(f"  📊 pred-绝对收益相关性: {correlation_pred_profit:.4f}")
+        print(f"<i class='fas fa-check-circle text-green-500'></i> 基于完整交易的绝对收益分析完成")
+        print(f"  [COUNT] 总交易对数: {total_trades:,}")
+        print(f"  <i class='fas fa-coins text-yellow-500'></i> 总绝对盈利: {total_profit:.2f}")
+        print(f"  <i class='fas fa-chart-line text-green-500'></i> 整体胜率: {overall_win_rate*100:.1f}%")
+        print(f"  <i class='fas fa-chart-bar text-indigo-500'></i> pred-real相关性: {correlation_pred_real:.4f}")
+        print(f"  <i class='fas fa-chart-bar text-indigo-500'></i> pred-绝对收益相关性: {correlation_pred_profit:.4f}")
         
     def profitability_paradox_analysis(self):
         """盈利悖论分析 - 为什么预测准确但整体亏损"""
-        print("\n🤔 === 盈利悖论分析 ===")
+        print("\n<i class='fas fa-question-circle text-yellow-500'></i> === 盈利悖论分析 ===")
         print("分析问题：模型预测准确但策略整体亏损的原因")
         
         # 1. 基础数据准备
         required_cols = ['pred', 'real', 'direction', 'tradeAmount', 'fee', 'tradeQty']
         missing_cols = [c for c in required_cols if c not in self.df.columns]
         if missing_cols:
-            print(f"❌ 缺少分析所需列: {missing_cols}")
+            print(f"<i class='fas fa-times-circle text-red-500'></i> 缺少分析所需列: {missing_cols}")
             return
             
         analysis_data = self.df[required_cols + ['Timestamp']].dropna().copy()
         analysis_data['date'] = analysis_data['Timestamp'].dt.date
         
-        print(f"📊 分析数据量: {len(analysis_data):,} 条")
+        print(f"<i class='fas fa-chart-bar text-indigo-500'></i> 分析数据量: {len(analysis_data):,} 条")
         
         # 2. 按pred分组的详细盈亏分析
-        print("🔍 按预测值分组的盈亏分析...")
+        print("<i class='fas fa-search text-blue-400'></i> 按预测值分组的盈亏分析...")
         
         # 分组
         n_groups = 10
@@ -2246,7 +2534,7 @@ class LightweightAnalysis:
         
         print("各组盈亏情况:")
         if len(combined_stats) == 0:
-            print("  ❌ 没有可分析的数据")
+            print("  <i class='fas fa-times-circle text-red-500'></i> 没有可分析的数据")
             return
             
         for _, row in combined_stats.iterrows():
@@ -2254,10 +2542,10 @@ class LightweightAnalysis:
                   f"真实盈亏率{row['pnl_rate']*100:.3f}%, 手续费率{row['avg_fee_rate']*100:.4f}%")
         
         # 3. 创建盈利悖论分析图表
-        print("📈 生成盈利悖论分析图表...")
+        print("<i class='fas fa-chart-line text-green-500'></i> 生成盈利悖论分析图表...")
         
         if len(combined_stats) == 0:
-            print("❌ 无数据可生成图表")
+            print("<i class='fas fa-times-circle text-red-500'></i> 无数据可生成图表")
             return
             
         x_labels = [str(group) for group in combined_stats['pred_group']]
@@ -2265,7 +2553,7 @@ class LightweightAnalysis:
         y_pnl_rate = [float(val) * 100 for val in combined_stats['pnl_rate']]  # 转换为百分比
         y_pred = [float(val) for val in combined_stats['pred']]
         
-        print(f"📊 图表数据准备完成: {len(x_labels)}个分组")
+        print(f"<i class='fas fa-chart-bar text-indigo-500'></i> 图表数据准备完成: {len(x_labels)}个分组")
         
         fig_paradox = go.Figure()
         
@@ -2331,7 +2619,7 @@ class LightweightAnalysis:
         )
         
         # 4. 问题诊断和指标计算
-        print("🔍 问题诊断...")
+        print("<i class='fas fa-search text-blue-400'></i> 问题诊断...")
         
         # 分析各种可能的原因
         diagnoses = []
@@ -2382,18 +2670,18 @@ class LightweightAnalysis:
         if diagnoses:
             diagnosis_text = "；".join(diagnoses)
             explanation_html = f"""
-            <h4>🤔 盈利悖论诊断结果</h4>
+            <h4><i class='fas fa-question-circle text-yellow-500'></i> 盈利悖论诊断结果</h4>
             <div style="background: #fff3cd; padding: 15px; border-left: 4px solid #ffc107; margin: 10px 0;">
                 <p><strong>发现的问题：</strong></p>
                 <p>{diagnosis_text}</p>
             </div>
-            <h4>📊 分析说明</h4>
+            <h4><i class='fas fa-chart-bar text-indigo-500'></i> 分析说明</h4>
             <ul>
                 <li><b>理论收益</b>: 基于real字段的原始收益预期</li>
                 <li><b>实际盈亏率</b>: 考虑交易方向和费用后的真实收益</li>
                 <li><b>核心问题</b>: 模型预测准确，但实际执行存在系统性损耗</li>
             </ul>
-            <h4>💡 优化建议</h4>
+            <h4><i class='fas fa-lightbulb text-yellow-500'></i> 优化建议</h4>
             <ul>
                 <li>降低交易频率，减少费用负担</li>
                 <li>优化仓位管理，提高资金利用效率</li>
@@ -2403,24 +2691,24 @@ class LightweightAnalysis:
             """
         else:
             explanation_html = """
-            <h4>✅ 未发现明显的系统性问题</h4>
+            <h4><i class='fas fa-check-circle text-green-500'></i> 未发现明显的系统性问题</h4>
             <p>模型预测准确且执行正常，收益为负可能是由于市场环境或其他外部因素。</p>
             """
         
         # 添加详细的数据处理过程说明 - 重点解释收益计算差异
         paradox_processing_steps = f"""
         <div style="margin-top: 30px; padding: 15px; background-color: #fff3cd; border-left: 4px solid #ffc107;">
-        <h4>🔍 收益计算方法详细对比</h4>
+        <h4><i class='fas fa-search text-blue-400'></i> 收益计算方法详细对比</h4>
         <p><b>为什么之前显示-8.83%，现在显示{actual_return_rate*100:.3f}%？</b></p>
         
-        <h5>❌ 之前错误的计算方法：</h5>
+        <h5><i class='fas fa-times-circle text-red-500'></i> 之前错误的计算方法：</h5>
         <ol>
             <li><b>忽略交易方向</b>: 直接使用real字段，没有区分买入(B)和卖出(S)</li>
             <li><b>错误的聚合方式</b>: 股票-日聚合时简单取平均，丢失了方向信息</li>
             <li><b>基准参考错误</b>: 可能使用了不恰当的收益率计算基准</li>
         </ol>
         
-        <h5>✅ 现在正确的计算方法：</h5>
+        <h5><i class='fas fa-check-circle text-green-500'></i> 现在正确的计算方法：</h5>
         <ol>
             <li><b>考虑交易方向</b>:
                 <br>• 买入(B): theoretical_pnl = real × tradeAmount
@@ -2431,7 +2719,7 @@ class LightweightAnalysis:
         </div>
         
         <div style="margin-top: 20px; padding: 15px; background-color: #f8f9fa; border-left: 4px solid #17a2b8;">
-        <h4>📋 数据处理详细过程</h4>
+        <h4><i class='fas fa-clipboard-list text-blue-500'></i> 数据处理详细过程</h4>
         <ol>
             <li><b>数据源</b>: orders.parquet文件的pred, real, direction, tradeAmount, fee字段</li>
             <li><b>数据清洗</b>: 移除任何必要字段有缺失值的记录</li>
@@ -2465,32 +2753,32 @@ class LightweightAnalysis:
             metrics=paradox_metrics
         )
         
-        print(f"✅ 盈利悖论分析完成")
-        print(f"🎯 关键发现: 实际收益率{actual_return_rate*100:.3f}%, 费用影响{fee_impact*100:.4f}%")
+        print(f"<i class='fas fa-check-circle text-green-500'></i> 盈利悖论分析完成")
+        print(f"<i class='fas fa-bullseye text-red-500'></i> 关键发现: 实际收益率{actual_return_rate*100:.3f}%, 费用影响{fee_impact*100:.4f}%")
         if diagnoses:
-            print(f"⚠️ 发现{len(diagnoses)}个潜在问题")
+            print(f"<i class='fas fa-exclamation-triangle text-yellow-500'></i> 发现{len(diagnoses)}个潜在问题")
             for i, diag in enumerate(diagnoses, 1):
                 print(f"   {i}. {diag}")
         
     def portfolio_composition_analysis(self):
         """收盘后持仓市值概览 - 现金、仓位市值与交易成本走势"""
-        print("\n💼 === 收盘后持仓市值 ===")
+        print("\n<i class='fas fa-briefcase text-gray-600'></i> === 收盘后持仓市值 ===")
         
         # 尝试从盯市分析结果中加载数据
-        print("📊 读取盯市分析数据...")
+        print("<i class='fas fa-chart-bar text-indigo-500'></i> 读取盯市分析数据...")
         
         try:
             from pathlib import Path
             mtm_file = Path("mtm_analysis_results/daily_nav_revised.csv")
             if not mtm_file.exists():
-                print("⚠️ 未找到盯市分析结果文件，跳过收盘后持仓市值页面")
+                print("<i class='fas fa-exclamation-triangle text-yellow-500'></i> 未找到盯市分析结果文件，跳过收盘后持仓市值页面")
                 return
             
             # 读取盯市分析的详细数据
             mtm_df = pd.read_csv(mtm_file)
             mtm_df['date'] = pd.to_datetime(mtm_df['date'])
             
-            print(f"✅ 成功读取盯市数据: {len(mtm_df)} 天")
+            print(f"<i class='fas fa-check-circle text-green-500'></i> 成功读取盯市数据: {len(mtm_df)} 天")
             
             # 解析数值数据 - 处理格式化的字符串
             def parse_currency(val):
@@ -2521,7 +2809,7 @@ class LightweightAnalysis:
             # 使用正确的初始资金重新计算现金和NAV
             CORRECT_INITIAL_CAPITAL = 62_090_808
             
-            print(f"\n🔧 使用正确的初始资金重新计算现金余额: ¥{CORRECT_INITIAL_CAPITAL:,.0f}")
+            print(f"\n[RECALC] 使用正确的初始资金重新计算现金余额: ¥{CORRECT_INITIAL_CAPITAL:,.0f}")
             
             # 从订单数据计算每日现金流
             self.df['date'] = self.df['Timestamp'].dt.date
@@ -2570,14 +2858,14 @@ class LightweightAnalysis:
             print(f"   总资产范围: {mtm_df['total_assets_num'].min():,.0f} 到 {mtm_df['total_assets_num'].max():,.0f}")
             
         except Exception as e:
-            print(f"❌ 读取盯市数据失败: {e}")
+            print(f"<i class='fas fa-times-circle text-red-500'></i> 读取盯市数据失败: {e}")
             return
         
         # fee已经在上面的daily_flows_aligned中计算了，直接使用
         portfolio_df = mtm_df.copy()
         portfolio_df['fee'] = portfolio_df['fee'].fillna(0)
         
-        print("✅ 已基于正确初始资金重新计算现金余额和NAV")
+        print("<i class='fas fa-check-circle text-green-500'></i> 已基于正确初始资金重新计算现金余额和NAV")
         
         # 校验现金恒等式：cash = total_assets - long_value + short_value
         portfolio_df['cash_expected'] = portfolio_df['total_assets_num'] - portfolio_df['long_value_num'] + portfolio_df['short_value_num']
@@ -2594,10 +2882,10 @@ class LightweightAnalysis:
         if len(portfolio_df) > 250:
             step = len(portfolio_df) // 200
             portfolio_sampled = portfolio_df.iloc[::step]
-            print(f"📉 数据采样: {len(portfolio_df)} -> {len(portfolio_sampled)} 个点")
+            print(f"<i class='fas fa-chart-line-down text-red-500'></i> 数据采样: {len(portfolio_df)} -> {len(portfolio_sampled)} 个点")
         else:
             portfolio_sampled = portfolio_df
-            print(f"📊 数据无需采样: {len(portfolio_df)} 个点")
+            print(f"<i class='fas fa-chart-bar text-indigo-500'></i> 数据无需采样: {len(portfolio_df)} 个点")
         
         # 创建投资组合构成图表
         fig_portfolio = go.Figure()
@@ -2709,23 +2997,23 @@ class LightweightAnalysis:
         
         # 生成说明文档
         portfolio_explanation = f"""
-        <h4>💼 页面目的</h4>
+        <h4><i class='fas fa-briefcase text-gray-600'></i> 页面目的</h4>
         <p>展示每日收盘时刻的资产负债快照，帮助评估策略收市时的资金占用、仓位结构以及调整成本，便于与收益表现结合诊断。</p>
-        <h4>📈 图线含义</h4>
+        <h4><i class='fas fa-chart-line text-green-500'></i> 图线含义</h4>
         <ul>
             <li><b>现金余额（绿色）</b>: 收盘后留存的现金头寸，体现策略在资金安全垫与融资需求上的取舍。</li>
             <li><b>多头持仓市值（蓝色）</b>: 按收盘价估算的多头持仓规模，对应收盘时的多头敞口。</li>
             <li><b>空头持仓市值（红色）</b>: 收盘时的空头持仓绝对金额，反映对冲或做空力度。</li>
             <li><b>每日交易费用（橙色，右轴）</b>: 当日发生的全部手续费、滑点等成本，用于衡量仓位调整的代价。</li>
         </ul>
-        <h4>🔍 使用建议</h4>
+        <h4><i class='fas fa-search text-blue-400'></i> 使用建议</h4>
         <ul>
             <li><b>收盘仓位节奏</b>: 结合多头/空头曲线，判断策略是否在重要日期显著增减仓。</li>
             <li><b>资金安全垫</b>: 关注现金曲线的低点与波动，评估是否存在资金吃紧或闲置。</li>
             <li><b>杠杆与对冲</b>: 负现金或显著空头敞口提示杠杆使用程度，需要核对保证金占用。</li>
             <li><b>调整成本</b>: 手续费与仓位变动同时放大时，应进一步分析是否产生额外的交易损耗。</li>
         </ul>
-        <h4>⚙️ 数据生成流程</h4>
+        <h4><i class='fas fa-cog text-gray-500'></i> 数据生成流程</h4>
         <ol>
             <li>读取 <code>mtm_analysis_results/daily_nav_revised.csv</code>，提取收盘现金、多头市值、空头市值及总资产字段并统一为数值型。</li>
             <li>使用正确的初始本金 62,090,808 元（基于首日最低所需本金 47,762,160 × 1.3），重新计算每日现金余额和总资产。</li>
@@ -2743,7 +3031,7 @@ class LightweightAnalysis:
         )
         
         # 交易结构：按市值/行业/板块的交易金额占比（饼图）
-        print("📊 计算交易结构饼图（市值/行业/板块）...")
+        print("<i class='fas fa-chart-bar text-indigo-500'></i> 计算交易结构饼图（市值/行业/板块）...")
         try:
             # 1) 使用配对成交数据计算每只股票的成交额（买+卖），更贴近真实成交
             pairs = pd.read_parquet('data/paired_trades_fifo.parquet')
@@ -2878,7 +3166,7 @@ class LightweightAnalysis:
 
             # 说明
             pies_explain = """
-            <h4>📊 交易结构（饼图）</h4>
+            <h4><i class='fas fa-chart-bar text-indigo-500'></i> 交易结构（饼图）</h4>
             <ul>
                 <li>成交额口径：使用配对成交（FIFO）后的买入额+卖出额总和，按股票汇总。</li>
                 <li>市值分桶：默认单位亿元，≥1000为大盘，≥100为中盘，其余为小/微盘；未知为未获取到市值。</li>
@@ -2939,7 +3227,7 @@ class LightweightAnalysis:
                 }
 
                 profit_explain = """
-                <h4>💹 盈利金额占比（子页）</h4>
+                <h4><i class='fas fa-chart-line text-green-500'></i> 盈利金额占比（子页）</h4>
                 <ul>
                     <li><b>统计口径</b>：本图表<b>仅统计盈利 > 0 的交易对</b>，通过交易配对算法计算每笔买卖配对后扣除手续费的净利润 (absolute_profit)。</li>
                     <li><b>重要说明</b>：总盈利额为所有盈利交易对的累计金额，<b>不包含亏损交易</b>。实际净盈利需扣除亏损交易后约为该金额的 40-50%。</li>
@@ -2980,16 +3268,16 @@ class LightweightAnalysis:
                     secondary_title='按交易所板块的盈利金额占比'
                 )
 
-            print("   ✅ 交易结构饼图已生成")
+            print("   <i class='fas fa-check-circle text-green-500'></i> 交易结构饼图已生成")
         except Exception as e:
-            print(f"   ❌ 交易结构饼图生成失败: {e}")
+            print(f"   <i class='fas fa-times-circle text-red-500'></i> 交易结构饼图生成失败: {e}")
             import traceback
             traceback.print_exc()
         
-        print(f"✅ 收盘后持仓市值分析完成")
-        print(f"💰 现金变化: {total_cash_change:+,.0f} 元")
-        print(f"📊 平均多头市值: {avg_long_position:,.0f} 元")
-        print(f"💸 总交易费用: {total_fees:,.2f} 元")
+        print(f"<i class='fas fa-check-circle text-green-500'></i> 收盘后持仓市值分析完成")
+        print(f"<i class='fas fa-coins text-yellow-500'></i> 现金变化: {total_cash_change:+,.0f} 元")
+        print(f"<i class='fas fa-chart-bar text-indigo-500'></i> 平均多头市值: {avg_long_position:,.0f} 元")
+        print(f"<i class='fas fa-money-bill-wave text-green-600'></i> 总交易费用: {total_fees:,.2f} 元")
         
     def _build_factor_dataset(self) -> Optional[pd.DataFrame]:
         """构建因子数据集（按 Code-日 粒度）
@@ -3000,7 +3288,7 @@ class LightweightAnalysis:
 
         返回: DataFrame[Code, date, ln_market_cap, mom_5d, mom_20d, liquidity, market_cap(optional)]
         """
-        print("\n📦 构建因子数据集（近似日频）...")
+        print("\n<i class='fas fa-box-open text-yellow-600'></i> 构建因子数据集（近似日频）...")
         close_df = None
         # 记录构建口径，供方法说明精确描述
         info = {
@@ -3028,7 +3316,7 @@ class LightweightAnalysis:
                 continue
 
         if close_df is None:
-            print("⚠️ 未找到日频收盘价缓存，因子将退化（仅可能使用静态市值）")
+            print("<i class='fas fa-exclamation-triangle text-yellow-500'></i> 未找到日频收盘价缓存，因子将退化（仅可能使用静态市值）")
             # 仍尝试构造仅包含市值的因子
             meta = None
             try:
@@ -3036,12 +3324,12 @@ class LightweightAnalysis:
             except Exception:
                 meta = None
             if meta is None:
-                print("❌ 无可用的市值或收盘价数据，跳过因子构建")
+                print("<i class='fas fa-times-circle text-red-500'></i> 无可用的市值或收盘价数据，跳过因子构建")
                 return None
             meta = meta.copy()
             code_col = 'Code' if 'Code' in meta.columns else ('code' if 'code' in meta.columns else None)
             if code_col is None:
-                print("❌ stock_metadata.parquet 缺少 Code 列，跳过因子构建")
+                print("<i class='fas fa-times-circle text-red-500'></i> stock_metadata.parquet 缺少 Code 列，跳过因子构建")
                 return None
             # 取市值列
             cap_col = None
@@ -3050,7 +3338,7 @@ class LightweightAnalysis:
                     cap_col = c
                     break
             if cap_col is None:
-                print("⚠️ 元数据缺少市值列，无法构建 size 因子")
+                print("<i class='fas fa-exclamation-triangle text-yellow-500'></i> 元数据缺少市值列，无法构建 size 因子")
                 return None
             meta['market_cap'] = pd.to_numeric(meta[cap_col], errors='coerce')
             meta = meta[[code_col, 'market_cap']].dropna()
@@ -3071,7 +3359,7 @@ class LightweightAnalysis:
         # 统一代码列
         code_col = 'Code' if 'Code' in close_df.columns else ('code' if 'code' in close_df.columns else None)
         if code_col is None:
-            print("❌ 收盘价缓存缺少 Code 列")
+            print("<i class='fas fa-times-circle text-red-500'></i> 收盘价缓存缺少 Code 列")
             return None
         close_df.rename(columns={code_col: 'Code'}, inplace=True)
         # 统一日期列
@@ -3081,7 +3369,7 @@ class LightweightAnalysis:
                 date_col = c
                 break
         if date_col is None:
-            print("❌ 收盘价缓存缺少日期列")
+            print("<i class='fas fa-times-circle text-red-500'></i> 收盘价缓存缺少日期列")
             return None
         close_df['date'] = pd.to_datetime(close_df[date_col]).dt.date
         # 统一收盘价列
@@ -3091,7 +3379,7 @@ class LightweightAnalysis:
                 px_col = c
                 break
         if px_col is None:
-            print("❌ 收盘价缓存缺少收盘价列")
+            print("<i class='fas fa-times-circle text-red-500'></i> 收盘价缓存缺少收盘价列")
             return None
         close_df = close_df[['Code', 'date', px_col] + [c for c in close_df.columns if c not in ['Code', 'date', px_col]]]
         close_df.sort_values(['Code', 'date'], inplace=True)
@@ -3337,31 +3625,41 @@ class LightweightAnalysis:
                         mdf = mdf.merge(buy_keys, on=['Code', 'date'], how='inner')
                         print(f"[5m筛选] 原始{before_rows:,}行 -> 相关{len(mdf):,}行")
 
-                    # 指数5m收益（若可用）
-                    idx_path = Path('data/index_5m_cache.parquet')
+                    # 全市场等权 5m 收益（用于回退或补齐）
+                    mdf['ret_5m_tmp'] = mdf.groupby('Code')[px_m].pct_change()
+                    mkt_5m = (mdf.groupby('datetime')['ret_5m_tmp'].mean().rename('idx_ret').reset_index())
+
+                    # 指数5m收益（优先抓取沪深300，若缺失回退为等权市场）
                     idx_ret = None
-                    if idx_path.exists():
+                    idx_source = 'unknown'
+                    try:
+                        idx_ret, idx_source = self._get_index_5m_returns(mdf['datetime'].min(), mdf['datetime'].max())
+                    except Exception as exc:
+                        print(f"<i class='fas fa-exclamation-triangle text-yellow-500'></i> 指数5m获取失败，准备回退等权: {exc}")
+                        idx_ret = None
+                    if idx_ret is not None and len(mkt_5m) > 0:
                         try:
-                            idf = pd.read_parquet(idx_path)
-                            if 'datetime' in idf.columns and 'close' in idf.columns and len(idf) > 0:
-                                idf = idf[['datetime', 'close']].copy()
-                                idf['datetime'] = pd.to_datetime(idf['datetime'])
-                                idf = idf.sort_values('datetime')
-                                idf['idx_ret'] = idf['close'].pct_change()
-                                idx_ret = idf[['datetime', 'idx_ret']]
-                                info['index_5m_source'] = 'index_5m_cache.parquet'
+                            cov_merge = mkt_5m.merge(idx_ret, on='datetime', how='left', suffixes=('_mkt', '_idx'))
+                            coverage_ratio = cov_merge['idx_ret_idx'].notna().mean()
+                            if coverage_ratio < 0.95:
+                                cov_merge['idx_ret'] = cov_merge['idx_ret_idx'].combine_first(cov_merge['idx_ret_mkt'])
+                                idx_ret = cov_merge[['datetime', 'idx_ret']]
+                                info['index_5m_source'] = f"{idx_source}+fill_equal_weight"
+                                print(f"<i class='fas fa-exclamation-triangle text-yellow-500'></i> 指数5m覆盖率 {coverage_ratio:.1%}，已用等权市场填补缺口")
+                            else:
+                                info['index_5m_source'] = idx_source
                         except Exception:
-                            idx_ret = None
+                            info['index_5m_source'] = idx_source
                     # 回退：若指数5m不可用，则用等权市场5m收益
-                    if idx_ret is None:
-                        try:
-                            mdf['ret_5m_tmp'] = mdf.groupby('Code')[px_m].pct_change()
-                            mkt_5m = (mdf.groupby('datetime')['ret_5m_tmp'].mean().rename('idx_ret').reset_index())
-                            if len(mkt_5m) > 0:
-                                idx_ret = mkt_5m
-                                info['index_5m_source'] = 'equal_weight_market_from_5m'
-                        except Exception:
-                            idx_ret = None
+                    if idx_ret is None and len(mkt_5m) > 0:
+                        idx_ret = mkt_5m
+                        info['index_5m_source'] = 'equal_weight_market_from_5m'
+
+                    # 释放临时列，降低后续内存压力
+                    try:
+                        mdf = mdf.drop(columns=['ret_5m_tmp'])
+                    except Exception:
+                        pass
 
                     # 分块按股票处理，支持断点续算与周期性落盘
                     results = []
@@ -3548,12 +3846,12 @@ class LightweightAnalysis:
                 info['mom_5m_intraday_coverage'] = cov_5m
                 info['mom_30m_intraday_coverage'] = cov_30m
                 if cov_5m < 0.5 or cov_30m < 0.5:
-                    print(f"⚠️ 分钟动量覆盖率较低: mom_5m={cov_5m:.1%}, mom_30m={cov_30m:.1%}，缺失部分保持NaN")
+                    print(f"<i class='fas fa-exclamation-triangle text-yellow-500'></i> 分钟动量覆盖率较低: mom_5m={cov_5m:.1%}, mom_30m={cov_30m:.1%}，缺失部分保持NaN")
             except Exception:
                 pass
         else:
             # 修正：无分钟数据时，不使用日频动量替代，直接设为NaN
-            print("⚠️ 未找到5分钟K数据，高频动量因子将全部为NaN（不使用日频替代）")
+            print("<i class='fas fa-exclamation-triangle text-yellow-500'></i> 未找到5分钟K数据，高频动量因子将全部为NaN（不使用日频替代）")
             factors['mom_5m'] = np.nan
             factors['mom_30m'] = np.nan
             factors['mom_60m'] = np.nan
@@ -3581,7 +3879,7 @@ class LightweightAnalysis:
                 on=['Code', 'date'],
                 how='left'
             )
-        print(f"✅ 因子集构建完成: {len(factors):,} 行, 覆盖股票数: {factors['Code'].nunique():,}")
+        print(f"<i class='fas fa-check-circle text-green-500'></i> 因子集构建完成: {len(factors):,} 行, 覆盖股票数: {factors['Code'].nunique():,}")
         try:
             price_cols = [c for c in ['Code', 'date', 'close', 'high', 'low', 'amount', 'volume', 'market_cap'] if c in close_df.columns]
             self._daily_price_df = close_df[price_cols].copy() if price_cols else close_df[['Code', 'date']].copy()
@@ -3618,13 +3916,13 @@ class LightweightAnalysis:
         if self._trade_flow_cache is not None:
             return self._trade_flow_cache.copy()
         if self.df is None or len(self.df) == 0:
-            print("⚠️ 无交易数据，无法构建交易流水")
+            print("<i class='fas fa-exclamation-triangle text-yellow-500'></i> 无交易数据，无法构建交易流水")
             return None
 
         cols_required = ['Code', 'Timestamp', 'direction', 'tradeQty', 'tradeAmount']
         missing_cols = [c for c in cols_required if c not in self.df.columns]
         if missing_cols:
-            print(f"⚠️ 交易数据缺少必需列: {missing_cols}")
+            print(f"<i class='fas fa-exclamation-triangle text-yellow-500'></i> 交易数据缺少必需列: {missing_cols}")
             return None
 
         trades = self.df[cols_required + ['price'] if 'price' in self.df.columns else cols_required].copy()
@@ -3633,7 +3931,7 @@ class LightweightAnalysis:
         trades['tradeAmount'] = pd.to_numeric(trades['tradeAmount'], errors='coerce')
         trades = trades[(trades['tradeQty'] > 0) & trades['tradeAmount'].notna()]
         if len(trades) == 0:
-            print("⚠️ 过滤后无有效成交记录")
+            print("<i class='fas fa-exclamation-triangle text-yellow-500'></i> 过滤后无有效成交记录")
             return None
 
         trades['Timestamp'] = pd.to_datetime(trades['Timestamp'], utc=False, errors='coerce')
@@ -3664,7 +3962,7 @@ class LightweightAnalysis:
         # 剔除纯平仓（不改变仓位）的记录
         trades = trades[trades['trade_weight'] > 0]
         if len(trades) == 0:
-            print("⚠️ 所有成交均为仓位削减或对冲，缺少新增仓位记录")
+            print("<i class='fas fa-exclamation-triangle text-yellow-500'></i> 所有成交均为仓位削减或对冲，缺少新增仓位记录")
             return None
 
         trades['trade_date'] = trades['Timestamp'].dt.date
@@ -3685,12 +3983,12 @@ class LightweightAnalysis:
 
         trades = self._prepare_trade_flows()
         if trades is None or len(trades) == 0:
-            print("⚠️ 无交易流水，分钟因子快照构建跳过")
+            print("<i class='fas fa-exclamation-triangle text-yellow-500'></i> 无交易流水，分钟因子快照构建跳过")
             return None
 
         code_set = trades['Code'].dropna().unique()
         if len(code_set) == 0:
-            print("⚠️ 交易流水未包含代码信息")
+            print("<i class='fas fa-exclamation-triangle text-yellow-500'></i> 交易流水未包含代码信息")
             return None
 
         minute_candidates = [Path('data/minute_5m_cache.parquet'), Path('data/minute_5m.parquet')]
@@ -3705,7 +4003,7 @@ class LightweightAnalysis:
                 except Exception:
                     continue
         if minute_df is None or len(minute_df) == 0:
-            print("⚠️ 未找到5分钟K数据，分钟因子回退为日频")
+            print("<i class='fas fa-exclamation-triangle text-yellow-500'></i> 未找到5分钟K数据，分钟因子回退为日频")
             self._intraday_snapshot_cache = trades.copy()
             self._intraday_snapshot_cache['has_intraday'] = False
             return self._intraday_snapshot_cache.copy()
@@ -3726,7 +4024,7 @@ class LightweightAnalysis:
         low_col = next((c for c in ['low', 'Low', 'min'] if c in minute_df.columns), None)
 
         if code_col is None or dt_col is None or close_col is None:
-            print("⚠️ 5分钟K缺少必要列(Code/时间/收盘价)")
+            print("<i class='fas fa-exclamation-triangle text-yellow-500'></i> 5分钟K缺少必要列(Code/时间/收盘价)")
             self._intraday_snapshot_cache = trades.copy()
             self._intraday_snapshot_cache['has_intraday'] = False
             return self._intraday_snapshot_cache.copy()
@@ -3736,7 +4034,7 @@ class LightweightAnalysis:
         minute_df = minute_df.sort_values(['Code', 'datetime'])
         minute_df = minute_df[minute_df['Code'].isin(code_set)].copy()
         if len(minute_df) == 0:
-            print("⚠️ 5分钟K与交易代码无重叠")
+            print("<i class='fas fa-exclamation-triangle text-yellow-500'></i> 5分钟K与交易代码无重叠")
             self._intraday_snapshot_cache = trades.copy()
             self._intraday_snapshot_cache['has_intraday'] = False
             return self._intraday_snapshot_cache.copy()
@@ -3763,39 +4061,47 @@ class LightweightAnalysis:
         rolling_low = minute_df.groupby('Code')['low'].transform(lambda s: s.rolling(window=2, min_periods=1).min())
         minute_df['range_day'] = ((rolling_high - rolling_low) / minute_df['close']).replace([np.inf, -np.inf], np.nan)
 
-        # 指数5m收益
+        # 全市场等权 5m 收益（用于回退或填补缺口）
+        market_ret = None
+        try:
+            market_ret = minute_df.groupby('datetime')['ret_5m'].mean().rename('idx_ret_mkt').reset_index()
+        except Exception:
+            market_ret = None
+
+        # 指数5m收益：优先沪深300（自动抓取），缺失则回退全市场等权
         idx_ret = None
         idx_source = 'unknown'
-        idx_path = Path('data/index_5m_cache.parquet')
-        if idx_path.exists():
+        try:
+            idx_ret, idx_source = self._get_index_5m_returns(minute_df['datetime'].min(), minute_df['datetime'].max())
+            if idx_ret is not None:
+                print(f"<i class='fas fa-check-circle text-green-500'></i> 使用指数5m数据计算β（{len(idx_ret):,} 条记录，来源 {idx_source}）")
+        except Exception as exc:
+            print(f"<i class='fas fa-exclamation-triangle text-yellow-500'></i> 指数5m获取失败，将回退等权: {exc}")
+            idx_ret = None
+
+        # 回退或补齐：使用全市场等权收益替代指数收益
+        if idx_ret is not None and market_ret is not None and len(market_ret) > 0:
             try:
-                idx_df = pd.read_parquet(idx_path)
-                if 'datetime' in idx_df.columns and 'close' in idx_df.columns and len(idx_df) > 0:
-                    idx_df = idx_df[['datetime', 'close']].copy()
-                    idx_df['datetime'] = pd.to_datetime(idx_df['datetime'])
-                    idx_df = idx_df.sort_values('datetime')
-                    idx_df['idx_ret'] = idx_df['close'].pct_change()
-                    idx_ret = idx_df[['datetime', 'idx_ret']]
-                    idx_source = 'index_5m_cache'
-                    print(f"✅ 使用指数5m数据计算β（{len(idx_df)}条记录）")
+                cov_merge = market_ret.merge(idx_ret, on='datetime', how='left')
+                coverage_ratio = cov_merge['idx_ret'].notna().mean()
+                if coverage_ratio < 0.95:
+                    cov_merge['idx_ret'] = cov_merge['idx_ret'].combine_first(cov_merge['idx_ret_mkt'])
+                    idx_ret = cov_merge[['datetime', 'idx_ret']]
+                    idx_source = f"{idx_source}+fill_equal_weight"
+                    print(f"<i class='fas fa-exclamation-triangle text-yellow-500'></i> 指数5m覆盖率 {coverage_ratio:.1%}，已用等权市场填补缺口")
             except Exception:
-                idx_ret = None
-        
-        # 回退方案：使用全市场等权收益替代指数收益
-        if idx_ret is None:
-            print("⚠️ 指数5m数据缺失，使用全市场等权收益计算β")
+                pass
+
+        if idx_ret is None and market_ret is not None and len(market_ret) > 0:
+            print("<i class='fas fa-exclamation-triangle text-yellow-500'></i> 指数5m数据缺失，使用全市场等权收益计算β")
             try:
-                # 计算全市场等权收益（所有股票的平均收益）
-                market_ret = minute_df.groupby('datetime')['ret_5m'].mean().reset_index()
-                market_ret.columns = ['datetime', 'idx_ret']
-                if len(market_ret) > 0:
-                    idx_ret = market_ret
-                    idx_source = 'equal_weight_market_5m_snapshot'
-                    print(f"✅ 已生成等权市场收益（{len(market_ret)}个时点）")
+                idx_ret = market_ret.rename(columns={'idx_ret_mkt': 'idx_ret'})
+                idx_source = 'equal_weight_market_5m_snapshot'
+                print(f"<i class='fas fa-check-circle text-green-500'></i> 已生成等权市场收益（{len(idx_ret)}个时点）")
             except Exception as e:
-                print(f"❌ 等权市场收益计算失败: {e}")
+                print(f"<i class='fas fa-times-circle text-red-500'></i> 等权市场收益计算失败: {e}")
                 idx_ret = None
-        
+
         # 合并指数收益
         if idx_ret is None:
             minute_df['idx_ret'] = np.nan
@@ -3878,20 +4184,20 @@ class LightweightAnalysis:
         if self._positions_cache is not None:
             return self._positions_cache.copy()
         if self.df is None or len(self.df) == 0:
-            print("⚠️ 无交易数据，无法计算持仓")
+            print("<i class='fas fa-exclamation-triangle text-yellow-500'></i> 无交易数据，无法计算持仓")
             return None
 
         required = ['Code', 'Timestamp', 'direction', 'tradeQty']
         missing = [c for c in required if c not in self.df.columns]
         if missing:
-            print(f"⚠️ 交易数据缺少计算持仓所需列: {missing}")
+            print(f"<i class='fas fa-exclamation-triangle text-yellow-500'></i> 交易数据缺少计算持仓所需列: {missing}")
             return None
 
         orders = self.df[required].dropna(subset=required).copy()
         orders['tradeQty'] = pd.to_numeric(orders['tradeQty'], errors='coerce')
         orders = orders[orders['tradeQty'] > 0]
         if len(orders) == 0:
-            print("⚠️ 交易记录为空，无法统计持仓")
+            print("<i class='fas fa-exclamation-triangle text-yellow-500'></i> 交易记录为空，无法统计持仓")
             return None
 
         orders['Timestamp'] = pd.to_datetime(orders['Timestamp'])
@@ -3902,7 +4208,7 @@ class LightweightAnalysis:
 
         eod = orders.groupby(['Code', 'date'])['position_qty'].last().reset_index()
         if len(eod) == 0:
-            print("⚠️ 无有效持仓数据")
+            print("<i class='fas fa-exclamation-triangle text-yellow-500'></i> 无有效持仓数据")
             return None
 
         position_rows = []
@@ -3922,11 +4228,11 @@ class LightweightAnalysis:
 
     def _factor_exposure_analysis_legacy(self):
         """策略因子特征暴露度分析（按买入交易额加权，与市场基准对比）"""
-        print("\n📊 === 策略因子特征暴露度分析 ===")
+        print("\n<i class='fas fa-chart-bar text-indigo-500'></i> === 策略因子特征暴露度分析 ===")
         # 1) 构建因子数据集
         factors = self._build_factor_dataset()
         if factors is None or len(factors) == 0:
-            print("⚠️ 无法构建因子集，跳过因子暴露分析")
+            print("<i class='fas fa-exclamation-triangle text-yellow-500'></i> 无法构建因子集，跳过因子暴露分析")
             return
         factors['date'] = pd.to_datetime(factors['date']).dt.date
 
@@ -3934,19 +4240,19 @@ class LightweightAnalysis:
         try:
             pairs = pd.read_parquet('data/paired_trades_fifo.parquet')
         except Exception as e:
-            print(f"❌ 读取 paired_trades_fifo 失败: {e}")
+            print(f"<i class='fas fa-times-circle text-red-500'></i> 读取 paired_trades_fifo 失败: {e}")
             return
 
         # 标准化列
         code_col_pairs = 'code' if 'code' in pairs.columns else ('Code' if 'Code' in pairs.columns else None)
         if code_col_pairs is None:
-            print("❌ paired_trades_fifo 缺少 code 列")
+            print("<i class='fas fa-times-circle text-red-500'></i> paired_trades_fifo 缺少 code 列")
             return
         pairs = pairs.rename(columns={code_col_pairs: 'Code'})
 
         # 买入时间/金额
         if 'buy_timestamp' not in pairs.columns or 'buy_amount' not in pairs.columns:
-            print("❌ paired_trades_fifo 缺少 buy_timestamp 或 buy_amount 列")
+            print("<i class='fas fa-times-circle text-red-500'></i> paired_trades_fifo 缺少 buy_timestamp 或 buy_amount 列")
             return
         pairs['buy_date'] = pd.to_datetime(pairs['buy_timestamp']).dt.date
         pairs['buy_amount'] = pd.to_numeric(pairs['buy_amount'], errors='coerce').fillna(0.0)
@@ -3958,7 +4264,7 @@ class LightweightAnalysis:
             on=['Code', 'buy_date'], how='left'
         )
         if len(merged) == 0:
-            print("⚠️ 买入交易与因子数据无重叠，跳过")
+            print("<i class='fas fa-exclamation-triangle text-yellow-500'></i> 买入交易与因子数据无重叠，跳过")
             return
 
         def _weighted_exposure(df: pd.DataFrame, col: str) -> float:
@@ -4058,7 +4364,7 @@ class LightweightAnalysis:
         }
         show_cols = [c for c in ['ln_market_cap', 'mom_5m', 'mom_30m', 'mom_60m', 'rv_5m', 'beta_5m', 'range_day', 'liquidity'] if f'strat_{c}' in exp_df.columns]
         if len(show_cols) == 0:
-            print("⚠️ 无可视化的因子列，跳过")
+            print("<i class='fas fa-exclamation-triangle text-yellow-500'></i> 无可视化的因子列，跳过")
             return
 
         # 根据展示因子数量动态设置网格（固定每行2列，便于在dashboard中整齐展示）
@@ -4156,7 +4462,7 @@ class LightweightAnalysis:
         # β 的指数来源：若为等权回退来源则明确说明
         if str(index_5m_src) == 'equal_weight_market_from_5m':
             beta_line = (
-                r"<b>⚠️ 高频β（5分钟）- 等权市场基准</b>: "
+                r"<b><i class='fas fa-exclamation-triangle text-yellow-500'></i> 高频β（5分钟）- 等权市场基准</b>: "
                 r"当日内时间近邻对齐（±150秒）后，去均值做斜率近似：$\beta\approx\frac{\operatorname{Cov}(r_{\text{个股}},\,r_m^{EW})}{\operatorname{Var}(r_m^{EW})}$，"
                 r"其中 $r_m^{EW}=\frac{1}{N}\sum_{j=1}^{N}r_j$ 为全市场等权平均收益（约2835只股票）。"
                 "<b>由于沪深300指数5分钟数据缺失，采用此替代方案。</b>"
@@ -4183,7 +4489,7 @@ class LightweightAnalysis:
             )
 
         explanation = r"""
-        <h4>📌 方法说明（本页口径）</h4>
+        <h4><i class='fas fa-thumbtack text-red-400'></i> 方法说明（本页口径）</h4>
         <ul>
             <li><b>总体流程</b>: 以买入日期为锚，将每日策略持仓（按当日买入 <code>tradeAmount</code> 加权）与同日全市场的因子均值对比，得到"策略-市场"的动态暴露曲线。</li>
             <li><b>分钟口径</b>: 动量与日内指标在 5 分钟K 级别计算后按"同股当日"聚合；高频β在"同日内"用个股5分钟收益与指数5分钟收益做斜率近似。</li>
@@ -4208,7 +4514,7 @@ class LightweightAnalysis:
             <li><b>页面指标口径</b>: "均值"=全期时间均值 $E_t[\text{策略暴露}_X(t)]$；"末值"=末日值 $\text{策略暴露}_X(T)$；"末值相对市场"=$\text{策略暴露}_X(T)-\text{市场暴露}_X(T)$。</li>
         </ul>
 
-        <h4>📦 数据来源与构建（简要）</h4>
+        <h4><i class='fas fa-box-open text-yellow-600'></i> 数据来源与构建（简要）</h4>
         <ul>
             <li><b>5分钟个股K</b>: 由脚本抓取，先从 <code>data/orders.parquet</code> 推断 <code>Code</code> 与时间窗；输出包含开高低收价、成交量、成交额。</li>
             <li><b>5分钟指数</b>: 抓取沪深300指数或ETF；若不可用则以"全市场等权 5分钟收益"替代。</li>
@@ -4238,7 +4544,7 @@ class LightweightAnalysis:
                 cov5_txt = (f"{cov5_avg:.0%}" if pd.notna(cov5_avg) else "N/A")
                 cov30_txt = (f"{cov30_avg:.0%}" if pd.notna(cov30_avg) else "N/A")
                 mix_note_html = f"""
-                <h4>⚠️ 数据完整性提示</h4>
+                <h4><i class='fas fa-exclamation-triangle text-yellow-500'></i> 数据完整性提示</h4>
                 <ul>
                     <li>本页动量存在分钟数据缺失：5m覆盖率≈{cov5_txt}，30m覆盖率≈{cov30_txt}。</li>
                     <li><b>修正策略</b>：缺失部分保持NaN，<span style="color:#e74c3c;">不再混合日频动量</span>（避免日内情绪与短期趋势的经济含义混淆）。</li>
@@ -4257,21 +4563,21 @@ class LightweightAnalysis:
             explanation_html=explanation_final,
             metrics=metrics
         )
-        print("✅ 因子暴露分析完成")
+        print("<i class='fas fa-check-circle text-green-500'></i> 因子暴露分析完成")
 
     def factor_exposure_analysis(self):
-        print("\n📊 === 策略因子特征暴露分析（分钟快照 + 增量仓位） ===")
+        print("\n<i class='fas fa-chart-bar text-indigo-500'></i> === 策略因子特征暴露分析（分钟快照 + 增量仓位） ===")
 
         factors = self._build_factor_dataset()
         if factors is None or len(factors) == 0:
-            print("⚠️ 无法构建因子集，跳过因子暴露分析")
+            print("<i class='fas fa-exclamation-triangle text-yellow-500'></i> 无法构建因子集，跳过因子暴露分析")
             return
         factors = factors.copy()
         factors['date'] = pd.to_datetime(factors['date']).dt.date
 
         trades = self._prepare_trade_flows()
         if trades is None or len(trades) == 0:
-            print("⚠️ 无新增仓位成交记录，因子暴露分析跳过")
+            print("<i class='fas fa-exclamation-triangle text-yellow-500'></i> 无新增仓位成交记录，因子暴露分析跳过")
             return
 
         snapshots = self._build_intraday_factor_snapshots()
@@ -4399,7 +4705,7 @@ class LightweightAnalysis:
 
         show_cols = [c for c in factor_cols if f'strat_{c}' in exp_df.columns]
         if len(show_cols) == 0:
-            print("⚠️ 无可视化因子列，跳过图表绘制")
+            print("<i class='fas fa-exclamation-triangle text-yellow-500'></i> 无可视化因子列，跳过图表绘制")
             return
 
         cols = 2
@@ -4482,7 +4788,7 @@ class LightweightAnalysis:
         # 构建β说明文字
         if beta_source_snapshot == 'equal_weight_market_5m_snapshot':
             beta_note = (
-                "<li><b>⚠️ 高频β（5分钟）- 等权市场基准</b>: "
+                "<li><b><i class='fas fa-exclamation-triangle text-yellow-500'></i> 高频β（5分钟）- 等权市场基准</b>: "
                 "由于沪深300指数5分钟数据缺失，当前使用<b>全市场等权收益</b>（约2835只股票等权平均）作为市场基准 $r_m$。"
                 "计算公式：$\\beta_{i,t} = \\frac{\\text{Cov}(r_{i}, r_{m}^{EW})}{\\text{Var}(r_{m}^{EW})}$，"
                 "其中 $r_m^{EW} = \\frac{1}{N}\\sum_{j=1}^{N} r_j$ 为全市场等权平均收益。"
@@ -4499,22 +4805,22 @@ class LightweightAnalysis:
             )
         
         explanation_parts = [
-            "<h4>📌 方法说明</h4>",
+            "<h4><i class='fas fa-thumbtack text-red-400'></i> 方法说明</h4>",
             "<ul>",
             "<li><b>权重口径</b>: 仅统计带来仓位增加的 <code>tradeAmount</code>；多头/空头增量分别记录。</li>",
             "<li><b>暴露计算</b>: $\\text{策略暴露}_f(t) = \\frac{\\sum_i w_i(t) \\cdot x_{i,f}(t)}{\\sum_i w_i(t)}$，其中 $w_i$ 为新增仓位金额，$x_{i,f}$ 为该成交对应的因子值。</li>",
             "<li><b>分钟因子快照</b>: 使用时间近邻匹配查找交易时刻最近的5分钟K线因子值（最多回溯10分钟）。</li>",
             "<li><b>市场基准</b>: 同日全市场市值加权均值，$\\text{市场暴露}_f(t) = \\frac{\\sum_j m_j(t) \\cdot x_{j,f}(t)}{\\sum_j m_j(t)}$，若市值缺失则退化为简单平均。</li>",
-            "<li><b>⚠️ 前视偏差提示</b>: 市场基准当前使用静态市值，存在轻微前视偏差；策略端使用交易时刻向后查找，无前视偏差。</li>",
+            "<li><b><i class='fas fa-exclamation-triangle text-yellow-500'></i> 前视偏差提示</b>: 市场基准当前使用静态市值，存在轻微前视偏差；策略端使用交易时刻向后查找，无前视偏差。</li>",
             "</ul>",
-            "<h4>📊 数据来源</h4>",
+            "<h4><i class='fas fa-chart-bar text-indigo-500'></i> 数据来源</h4>",
             "<ul>",
             "<li><b>分钟级数据</b>: 通过 <b>Baostock（宝股）</b>平台抓取的个股5分钟K线数据，包含开高低收 <code>price</code>、成交量、成交额等字段，频率为5分钟，复权方式为不复权。</li>",
             "<li><b>指数数据</b>: 通过 <b>Baostock（宝股）</b>平台抓取的沪深300指数5分钟K线数据，用于计算高频β因子（市场风险暴露）。</li>",
             "<li><b>日频数据</b>: 通过 <b>Baostock（宝股）</b>平台抓取的个股日K线数据，包含日度收盘价、成交额等，用于计算市值、流动性等日频因子。</li>",
             "<li><b>基本面数据</b>: 股票市值等基本面数据同样来自 <b>Baostock（宝股）</b>平台的历史数据接口。</li>",
             "</ul>",
-            "<h4>📐 因子构造公式</h4>",
+            "<h4><i class='fas fa-ruler-combined text-indigo-500'></i> 因子构造公式</h4>",
             "<ul>",
             "<li><b>市值对数因子</b>: $\\text{Size}_{i,t} = \\ln(\\text{市值}_{i,t})$，其中市值为股票总市值或流通市值。</li>",
             "<li><b>非流动性（Amihud ILLIQ）</b>: $\\text{ILLIQ}_{i,t} = \\frac{|r_{i,t}|}{\\text{日成交额}_{i,t}}$，其中 $r_{i,t}$ 为日收益率，日成交额为当日总成交金额。值越大表示流动性越差。</li>",
@@ -4527,7 +4833,7 @@ class LightweightAnalysis:
             "</ul>"
         ]
         if coverage_items:
-            explanation_parts.append("<h4>📡 分钟覆盖率</h4><ul>")
+            explanation_parts.append("<h4><i class='fas fa-satellite-dish text-blue-400'></i> 分钟覆盖率</h4><ul>")
             explanation_parts.extend(coverage_items)
             explanation_parts.append("</ul>")
 
@@ -4539,7 +4845,7 @@ class LightweightAnalysis:
             metrics=metrics
         )
 
-        print("✅ 因子暴露分析完成 (分钟快照)")
+        print("<i class='fas fa-check-circle text-green-500'></i> 因子暴露分析完成 (分钟快照)")
 
         self.factor_direction_exposure_analysis(exp_df, direction_df, titles_map, coverage_summary)
         self.factor_holdings_exposure_analysis(factors, titles_map)
@@ -4552,7 +4858,7 @@ class LightweightAnalysis:
         coverage_summary: dict
     ) -> None:
         if direction_df is None or len(direction_df) == 0:
-            print("⚠️ 无多空方向增量数据，跳过方向分解图表")
+            print("<i class='fas fa-exclamation-triangle text-yellow-500'></i> 无多空方向增量数据，跳过方向分解图表")
             return
 
         show_cols = [
@@ -4560,7 +4866,7 @@ class LightweightAnalysis:
             if f'long_{col}' in direction_df.columns and f'short_{col}' in direction_df.columns
         ]
         if len(show_cols) == 0:
-            print("⚠️ 多空方向数据缺少可用因子列")
+            print("<i class='fas fa-exclamation-triangle text-yellow-500'></i> 多空方向数据缺少可用因子列")
             return
 
         cols = 2
@@ -4655,7 +4961,7 @@ class LightweightAnalysis:
             coverage_lines.append(f"<li>{titles_map.get(col, col)} 分钟覆盖率 = {ratio:.1%}</li>")
 
         explanation_parts = [
-            "<h4>🎯 多空增量解释（修正版）</h4>",
+            "<h4><i class='fas fa-bullseye text-red-500'></i> 多空增量解释（修正版）</h4>",
             "<ul>",
             "<li>以单日新增仓位资金为权重，分解多头与空头方向的因子暴露。</li>",
             "<li><b>符号约定</b>：空头暴露取负号，即 <code>short_exposure = -weighted_avg(factor, short_weight)</code>；这样净暴露 = 多头暴露 + 空头暴露（含负号）。</li>",
@@ -4664,7 +4970,7 @@ class LightweightAnalysis:
             "</ul>"
         ]
         if coverage_lines:
-            explanation_parts.append("<h4>📡 分钟覆盖率</h4><ul>")
+            explanation_parts.append("<h4><i class='fas fa-satellite-dish text-blue-400'></i> 分钟覆盖率</h4><ul>")
             explanation_parts.extend(coverage_lines)
             explanation_parts.append("</ul>")
 
@@ -4679,12 +4985,12 @@ class LightweightAnalysis:
     def factor_holdings_exposure_analysis(self, factors: pd.DataFrame, titles_map: dict) -> None:
         positions = self._build_daily_positions()
         if positions is None or len(positions) == 0:
-            print("⚠️ 无持仓信息，跳过持仓暴露分析")
+            print("<i class='fas fa-exclamation-triangle text-yellow-500'></i> 无持仓信息，跳过持仓暴露分析")
             return
 
         price_df = self._daily_price_df
         if price_df is None or len(price_df) == 0:
-            print("⚠️ 缺少日线价格数据，无法计算持仓市值")
+            print("<i class='fas fa-exclamation-triangle text-yellow-500'></i> 缺少日线价格数据，无法计算持仓市值")
             return
 
         price_df = price_df.copy()
@@ -4693,7 +4999,7 @@ class LightweightAnalysis:
 
         merged = positions.merge(price_df[['Code', 'date', 'close']], on=['Code', 'date'], how='left')
         if 'close' not in merged.columns or merged['close'].isna().all():
-            print("⚠️ 持仓数据缺少收盘价，跳过持仓暴露分析")
+            print("<i class='fas fa-exclamation-triangle text-yellow-500'></i> 持仓数据缺少收盘价，跳过持仓暴露分析")
             return
 
         merged['close'] = merged.groupby('Code')['close'].transform(lambda s: s.ffill().bfill())
@@ -4739,7 +5045,7 @@ class LightweightAnalysis:
         short_df = pd.DataFrame(short_rows).sort_values('date')
 
         if len(net_df) == 0:
-            print("⚠️ 持仓暴露结果为空，可能全部仓位为零")
+            print("<i class='fas fa-exclamation-triangle text-yellow-500'></i> 持仓暴露结果为空，可能全部仓位为零")
             return
 
         def _market_exposure(factors_day: pd.DataFrame, col: str) -> float:
@@ -4766,7 +5072,7 @@ class LightweightAnalysis:
 
         show_cols = [c for c in factor_cols if f'strat_{c}' in net_df.columns]
         if len(show_cols) == 0:
-            print("⚠️ 持仓暴露无可视化因子，跳过")
+            print("<i class='fas fa-exclamation-triangle text-yellow-500'></i> 持仓暴露无可视化因子，跳过")
             return
 
         cols = 2
@@ -4832,7 +5138,7 @@ class LightweightAnalysis:
                 metrics[f'{titles_map.get(col, col)}-空头均值'] = f"{pd.to_numeric(short_df[f'short_{col}'], errors='coerce').mean():.4f}"
 
         explanation_html = (
-            "<h4>🏦 持仓暴露说明</h4>"
+            "<h4><i class='fas fa-university text-gray-600'></i> 持仓暴露说明</h4>"
             "<ul>"
             "<li>按每日期末持仓市值计算净暴露，市值为收盘价×仓位股数。</li>"
             "<li>多头/空头曲线展示正负仓位的独立暴露强度，可与净暴露对照。</li>"
@@ -4850,10 +5156,10 @@ class LightweightAnalysis:
 
     def slippage_cost_analysis(self):
         """滑点成本分析 - 避免累积计算等错误"""
-        print("\n💰 === 滑点成本分析 ===")
+        print("\n<i class='fas fa-coins text-yellow-500'></i> === 滑点成本分析 ===")
         
         # 1. 数据预处理和滑点计算
-        print("🔍 计算滑点指标...")
+        print("<i class='fas fa-search text-blue-400'></i> 计算滑点指标...")
         
         # 确保只使用成交的订单
         traded_orders = self.df[self.df['tradeQty'] > 0].copy()
@@ -4888,7 +5194,7 @@ class LightweightAnalysis:
         print(f"清理后数据: {len(traded_orders):,} 条")
         
         # 2. 按日期聚合滑点指标 - 避免累积计算
-        print("📊 计算日度滑点指标...")
+        print("<i class='fas fa-chart-bar text-indigo-500'></i> 计算日度滑点指标...")
         traded_orders['date'] = traded_orders['Timestamp'].dt.date
         
         daily_slippage = traded_orders.groupby('date').agg({
@@ -5024,15 +5330,15 @@ class LightweightAnalysis:
                 }
             )
         
-        print(f"✅ 滑点成本分析完成")
+        print(f"<i class='fas fa-check-circle text-green-500'></i> 滑点成本分析完成")
         
     def daily_absolute_profit_analysis(self):
         """基于盯市结果，计算并可视化日度绝对盈利（¥）。并校验现金一致性。"""
-        print("\n💵 === 日度绝对盈利（盯市） ===")
+        print("\n<i class='fas fa-money-bill text-green-600'></i> === 日度绝对盈利（盯市） ===")
         from pathlib import Path
         mtm_file = Path("mtm_analysis_results/daily_nav_revised.csv")
         if not mtm_file.exists():
-            print("⚠️ 未找到盯市分析结果文件，跳过绝对盈利分析")
+            print("<i class='fas fa-exclamation-triangle text-yellow-500'></i> 未找到盯市分析结果文件，跳过绝对盈利分析")
             return
         try:
             mtm_df = pd.read_csv(mtm_file)
@@ -5074,7 +5380,7 @@ class LightweightAnalysis:
                 
                 mtm_df['cash_num'] = cash_series
                 mtm_df['total_assets_num'] = mtm_df['cash_num'] + mtm_df['long_value_num'] - mtm_df['short_value_num']
-                print(f"✅ 已基于正确初始资金重新计算NAV")
+                print(f"<i class='fas fa-check-circle text-green-500'></i> 已基于正确初始资金重新计算NAV")
             else:
                 # 回退：使用原始值
                 mtm_df['cash_num'] = mtm_df['cash'].apply(parse_currency)
@@ -5090,7 +5396,7 @@ class LightweightAnalysis:
             max_rel_diff = rel_diff.max() if len(rel_diff) else np.nan
             mean_rel_diff = rel_diff.mean() if len(rel_diff) else np.nan
 
-            print(f"📋 现金一致性校验: 最大绝对偏差={max_abs_diff:,.2f} 元, 平均绝对偏差={mean_abs_diff:,.2f} 元")
+            print(f"<i class='fas fa-clipboard-list text-blue-500'></i> 现金一致性校验: 最大绝对偏差={max_abs_diff:,.2f} 元, 平均绝对偏差={mean_abs_diff:,.2f} 元")
             if pd.notna(max_rel_diff):
                 print(f"   相对偏差(对总资产): 最大={max_rel_diff:.6%}, 平均={mean_rel_diff:.6%}")
 
@@ -5102,7 +5408,7 @@ class LightweightAnalysis:
             profit_series = pd.Series(mtm_df['daily_abs_profit'].values, index=mtm_df['date'])
             profit_series = profit_series.dropna()
             if len(profit_series) == 0:
-                print("❌ 无法计算绝对盈利（数据不足）")
+                print("<i class='fas fa-times-circle text-red-500'></i> 无法计算绝对盈利（数据不足）")
                 return
 
             total_profit = profit_series.sum()
@@ -5111,10 +5417,10 @@ class LightweightAnalysis:
             min_profit = profit_series.min()
             win_rate = (profit_series > 0).mean()
 
-            # 可视化：柱状图（正绿负红）+ 7日均线
+            # 可视化：柱状图（正红负绿 - A股标准）
             x_dates = [d.strftime('%Y-%m-%d') for d in profit_series.index]
             y_vals = profit_series.values.tolist()
-            colors = ['#2ecc71' if v >= 0 else '#e74c3c' for v in y_vals]
+            colors = ['#e53935' if v >= 0 else '#43a047' for v in y_vals]
 
             fig_abs = go.Figure()
             fig_abs.add_trace(go.Bar(
@@ -5151,14 +5457,14 @@ class LightweightAnalysis:
                 fig_abs.add_vline(
                     x=max_day_str, 
                     line_dash='dash', 
-                    line_color='green',
+                    line_color='#e53935',
                     line_width=2,
                     opacity=0.7
                 )
                 fig_abs.add_vline(
                     x=min_day_str, 
                     line_dash='dash', 
-                    line_color='red',
+                    line_color='#43a047',
                     line_width=2,
                     opacity=0.7
                 )
@@ -5167,7 +5473,7 @@ class LightweightAnalysis:
                 print(f"   最大亏损日: {min_day_str} (¥{min_profit:,.0f})")
                 
             except Exception as e:
-                print(f"   ⚠️ 添加盈利标注线失败: {e}")
+                print(f"   <i class='fas fa-exclamation-triangle text-yellow-500'></i> 添加盈利标注线失败: {e}")
                 # 继续执行，不中断整个分析
 
             fig_abs.update_layout(
@@ -5217,22 +5523,22 @@ class LightweightAnalysis:
                 metrics=merged_metrics
             )
 
-            print("✅ 日度绝对盈利图已生成")
+            print("<i class='fas fa-check-circle text-green-500'></i> 日度绝对盈利图已生成")
         except Exception as e:
-            print(f"❌ 绝对盈利分析失败: {e}")
+            print(f"<i class='fas fa-times-circle text-red-500'></i> 绝对盈利分析失败: {e}")
 
     def performance_metrics_analysis(self):
         """轻量级绩效指标分析 - 实现股票-日聚合的真实策略收益"""
-        print("\n📊 === 绩效指标分析（真实策略收益口径）===")
+        print("\n<i class='fas fa-chart-bar text-indigo-500'></i> === 绩效指标分析（真实策略收益口径）===")
         
         # 1. 股票-日聚合，避免多订单重复计权
-        print("🔍 执行股票-日聚合...")
+        print("<i class='fas fa-search text-blue-400'></i> 执行股票-日聚合...")
         
         # 添加日期列用于聚合
         self.df['date'] = self.df['Timestamp'].dt.date
         
         # 使用高效但完整的聚合方法，保持三种收益计算的准确性
-        print("📊 执行完整聚合（优化版本）...")
+        print("<i class='fas fa-chart-bar text-indigo-500'></i> 执行完整聚合（优化版本）...")
         
         # 预先计算各种加权值
         self.df['weighted_real_amount'] = self.df['real'] * self.df['tradeAmount']
@@ -5297,7 +5603,7 @@ class LightweightAnalysis:
         # 2. 计算三种收益方式
         
         # 优先使用配对交易数据替代旧的 real 字段口径
-        print("\n📊 优先使用配对交易数据计算 等权/金额加权 日收益...")
+        print("\n<i class='fas fa-chart-bar text-indigo-500'></i> 优先使用配对交易数据计算 等权/金额加权 日收益...")
         used_pairs_for_eq_amt = False
         try:
             paired_df = pd.read_parquet('data/paired_trades_fifo.parquet')
@@ -5387,16 +5693,16 @@ class LightweightAnalysis:
                 daily_amount_weighted = amt_exit
                 
                 used_pairs_for_eq_amt = True
-                print(f"   ✅ 使用配对交易数据计算完成: 天数(eq)={len(daily_returns_equal)}, 天数(wt)={len(daily_amount_weighted)}")
+                print(f"   <i class='fas fa-check-circle text-green-500'></i> 使用配对交易数据计算完成: 天数(eq)={len(daily_returns_equal)}, 天数(wt)={len(daily_amount_weighted)}")
             else:
-                print("   ⚠️ 配对交易数据为空，回退到原 real 字段方法")
+                print("   <i class='fas fa-exclamation-triangle text-yellow-500'></i> 配对交易数据为空，回退到原 real 字段方法")
         except Exception as e:
-            print(f"   ⚠️ 读取配对交易数据失败，回退: {e}")
+            print(f"   <i class='fas fa-exclamation-triangle text-yellow-500'></i> 读取配对交易数据失败，回退: {e}")
             used_pairs_for_eq_amt = False
         
         if not used_pairs_for_eq_amt:
             # 原方法（兼容回退）：基于 real 字段
-            print("\n📊 方法1: 股票等权日收益（回退: real）...")
+            print("\n<i class='fas fa-chart-bar text-indigo-500'></i> 方法1: 股票等权日收益（回退: real）...")
             
             real_stats = stock_daily['weighted_real'].describe()
             print(f"股票日加权real统计: 最小值={real_stats['min']:.2f}, 最大值={real_stats['max']:.2f}, 均值={real_stats['mean']:.4f}")
@@ -5418,7 +5724,7 @@ class LightweightAnalysis:
             daily_returns_equal.index = pd.to_datetime(daily_returns_equal.index)
             daily_returns_equal = daily_returns_equal.sort_index()
             
-            print("📊 方法2: 成交金额加权日收益（回退: real）...")
+            print("<i class='fas fa-chart-bar text-indigo-500'></i> 方法2: 成交金额加权日收益（回退: real）...")
             daily_amount_weighted = stock_daily.groupby('date').apply(
                 lambda g: (g['scaled_real'] * g['total_amount']).sum() / g['total_amount'].sum() 
                 if g['total_amount'].sum() > 0 else g['scaled_real'].mean()
@@ -5430,7 +5736,7 @@ class LightweightAnalysis:
             amt_by_mode = {'exit': daily_amount_weighted, 'entry': daily_amount_weighted}
         
         # 方法3: PnL(花出的钱)口径的日收益率：当日盯市PnL / 当日买入成交额
-        print("📊 方法3: PnL(花出的钱) = 当日盯市PnL / 当日买入成交额 ...")
+        print("<i class='fas fa-chart-bar text-indigo-500'></i> 方法3: PnL(花出的钱) = 当日盯市PnL / 当日买入成交额 ...")
 
         # 计算当日买入成交额（花出的钱），只统计方向为B的成交
         buy_amount_by_date = stock_daily.groupby('date')['buy_amount'].sum()
@@ -5444,7 +5750,7 @@ class LightweightAnalysis:
             from pathlib import Path
             mtm_file = Path("mtm_analysis_results/daily_nav_revised.csv")
             if mtm_file.exists():
-                print("   ✅ 发现盯市分析结果，按'花出的钱'口径计算PnL收益率")
+                print("   <i class='fas fa-check-circle text-green-500'></i> 发现盯市分析结果，按'花出的钱'口径计算PnL收益率")
                 
                 # 读取盯市数据并解析
                 mtm_df = pd.read_csv(mtm_file)
@@ -5504,9 +5810,9 @@ class LightweightAnalysis:
                 pnl_spend_df = aligned
                 pnl_spend_valid_mask = valid
             else:
-                print("   ⚠️ 未找到盯市分析结果，无法计算PnL(花出的钱)口径，跳过该方法")
+                print("   <i class='fas fa-exclamation-triangle text-yellow-500'></i> 未找到盯市分析结果，无法计算PnL(花出的钱)口径，跳过该方法")
         except Exception as e:
-            print(f"   ⚠️ 计算PnL(花出的钱)失败: {e}")
+            print(f"   <i class='fas fa-exclamation-triangle text-yellow-500'></i> 计算PnL(花出的钱)失败: {e}")
 
         # 若不可用，则用空序列占位，保持后续流程健壮
         if daily_pnl_spend_returns is None:
@@ -5515,11 +5821,11 @@ class LightweightAnalysis:
         
         # 使用等权方法作为主要显示（最稳定）
         daily_returns = daily_returns_equal
-        print(f"✅ 选择等权方法作为主要收益序列")
+        print(f"<i class='fas fa-check-circle text-green-500'></i> 选择等权方法作为主要收益序列")
         print(f"等权日收益范围: {daily_returns.min():.4f} 到 {daily_returns.max():.4f}, 均值: {daily_returns.mean():.6f}")
         
-        # 📊 调试：检查三种方法的数据范围
-        print(f"📊 三种方法的收益范围对比：")
+        # <i class='fas fa-chart-bar text-indigo-500'></i> 调试：检查三种方法的数据范围
+        print(f"<i class='fas fa-chart-bar text-indigo-500'></i> 三种方法的收益范围对比：")
         print(f"   等权方法: {daily_returns_equal.min():.4f} 到 {daily_returns_equal.max():.4f}, 标准差: {daily_returns_equal.std():.4f}")
         print(f"   金额加权: {daily_amount_weighted.min():.4f} 到 {daily_amount_weighted.max():.4f}, 标准差: {daily_amount_weighted.std():.4f}")
         if len(daily_pnl_spend_returns_clipped) > 0:
@@ -5624,7 +5930,7 @@ class LightweightAnalysis:
     <li><b>金额加权</b>：按开仓时 <code>tradeAmount</code> 加权，体现资金配置是否把更多资金投向更高收益的交易。</li>
     <li><b>PnL(花出的钱)</b>：<b>当日盯市盈亏 ÷ 当日买入总额</b>，是真实现金视角的单位投入回报；当日无买入则不定义。</li>
 </ul>
-<h4>🎯 PnL(花出的钱)方法说明</h4>
+<h4><i class='fas fa-bullseye text-red-500'></i> PnL(花出的钱)方法说明</h4>
 <ul>
     <li><b>真实现金口径</b>：仅统计 <code>direction</code> 为 <code>B</code> 的 <code>tradeAmount</code> 现金流出作为分母；卖出视作回笼资金。</li>
     <li><b>多空一致</b>：盯市总资产变化捕捉做多与做空收益，统一放在同一口径。</li>
@@ -5659,7 +5965,7 @@ class LightweightAnalysis:
             self._save_figure_with_details(fig_returns_comp, 'daily_returns_comparison_light', '日收益率对比（衡量下单质量的三种方法）', comparison_explanation, {})
             
             # 2. 使用 PnL(花出的钱) 口径的日收益率进行展示
-            print("📊 使用PnL(花出的钱)口径的日收益率数据...")
+            print("<i class='fas fa-chart-bar text-indigo-500'></i> 使用PnL(花出的钱)口径的日收益率数据...")
 
             returns_for_display = None
             data_source_name = ""
@@ -5765,7 +6071,7 @@ class LightweightAnalysis:
             })
 
             # 2. 累积收益 - 修正计算逻辑
-            print(f"🔍 计算累积收益，日收益率样本: min={daily_returns.min():.4f}, max={daily_returns.max():.4f}")
+            print(f"<i class='fas fa-search text-blue-400'></i> 计算累积收益，日收益率样本: min={daily_returns.min():.4f}, max={daily_returns.max():.4f}")
             
             # 对于盯市数据，保持原始数据完整性
             # 只对极端异常值进行裁剪
@@ -5856,7 +6162,7 @@ class LightweightAnalysis:
             
             # 如果按暴露PnL的绝对值超过其他方法的5倍，使用子图
             if abs(pnl_final) > 5 * max_other and np.isfinite(pnl_final):
-                print(f"📊 按暴露PnL收益量级较大 ({pnl_final*100:.1f}%)，使用子图显示")
+                print(f"<i class='fas fa-chart-bar text-indigo-500'></i> 按暴露PnL收益量级较大 ({pnl_final*100:.1f}%)，使用子图显示")
                 
                 # 创建双子图
                 fig_cum_comp = make_subplots(
@@ -5924,7 +6230,7 @@ class LightweightAnalysis:
                 fig_cum_comp.update_xaxes(title_text="日期", row=2, col=1, type='date')
                 
             else:
-                print(f"📊 三种方法量级相近，使用统一图表显示")
+                print(f"<i class='fas fa-chart-bar text-indigo-500'></i> 三种方法量级相近，使用统一图表显示")
                 
                 # 使用传统单图显示
                 fig_cum_comp = go.Figure()
@@ -5964,7 +6270,7 @@ class LightweightAnalysis:
             
             # 更新说明文档
             cumulative_explanation = f"""
-            <h4>📊 计算方法说明</h4>
+            <h4><i class='fas fa-chart-bar text-indigo-500'></i> 计算方法说明</h4>
             <p>本页展示三种日收益序列的复利累积结果（即 $\\prod(1 + r_i) - 1$），每条曲线的数据来源与计算方法如下：</p>
             
             <h5>方法1：等权收益（期末 {equal_total*100:.2f}%）</h5>
@@ -5994,14 +6300,14 @@ class LightweightAnalysis:
                 <li><b>适用场景</b>：资金利用效率监控、真实盈利能力评估</li>
             </ul>
             
-            <h4>📌 关键假设</h4>
+            <h4><i class='fas fa-thumbtack text-red-400'></i> 关键假设</h4>
             <ul>
                 <li>累积前对日收益序列进行裁剪至 [-90%, 90%] 区间，以抑制极端噪声对复利计算的影响（仅影响展示，不改变原始数据）</li>
                 <li>前两种方法基于配对交易，仅统计已完成的买卖对；第三种方法基于盯市总资产，包含全部持仓</li>
                 <li>三种方法的差异反映了"交易完成度"、"资金配置效率"与"真实现金效率"的不同视角</li>
             </ul>
             
-            <h4>📖 解读建议</h4>
+            <h4><i class='fas fa-book-open text-gray-500'></i> 解读建议</h4>
             <ul>
                 <li><b>方法接近</b>：当三条曲线趋势一致时，说明策略收益结构稳健，已平仓与未平仓收益方向一致</li>
                 <li><b>方法分离</b>：若PnL(花出的钱)显著偏离，可能是未平仓浮动盈亏较大，或当日资金投入与平仓节奏不匹配</li>
@@ -6019,7 +6325,7 @@ class LightweightAnalysis:
             
             # 基准对比累积收益图
             if self.benchmark_data:
-                print("📊 生成策略vs基准累积收益对比图...")
+                print("<i class='fas fa-chart-bar text-indigo-500'></i> 生成策略vs基准累积收益对比图...")
 
                 # 默认使用当前计算的策略累积收益
                 strategy_cum_for_bench = cumulative_returns
@@ -6027,12 +6333,12 @@ class LightweightAnalysis:
 
                 # 使用盯市分析的日度绝对盈利数据
                 try:
-                    print("📊 使用盯市分析的日度绝对盈利数据用于基准对比...")
+                    print("<i class='fas fa-chart-bar text-indigo-500'></i> 使用盯市分析的日度绝对盈利数据用于基准对比...")
                     
                     from pathlib import Path
                     mtm_file = Path("mtm_analysis_results/daily_nav_revised.csv")
                     if mtm_file.exists():
-                        print(f"✅ 发现盯市分析结果文件: {mtm_file}")
+                        print(f"<i class='fas fa-check-circle text-green-500'></i> 发现盯市分析结果文件: {mtm_file}")
                         
                         # 读取盯市分析结果
                         mtm_df = pd.read_csv(mtm_file)
@@ -6092,7 +6398,7 @@ class LightweightAnalysis:
                         ).dropna().sort_index()
                         cumulative_abs_profit = daily_abs_profit.cumsum()
                         
-                        print(f"✅ 使用盯市分析的日度绝对盈利结果")
+                        print(f"<i class='fas fa-check-circle text-green-500'></i> 使用盯市分析的日度绝对盈利结果")
                         print(f"   数据期间: {daily_abs_profit.index.min().date()} 到 {daily_abs_profit.index.max().date()}")
                         print(f"   交易天数: {len(daily_abs_profit)} 天")
                         print(f"   日度绝对盈利范围: ¥{daily_abs_profit.min():,.0f} 到 ¥{daily_abs_profit.max():,.0f}")
@@ -6105,11 +6411,11 @@ class LightweightAnalysis:
                         daily_abs_profit_for_bench = daily_abs_profit  # 仍可在图中展示日绝对盈利
                         
                     else:
-                        print(f"⚠️ 未找到盯市分析结果文件，使用默认策略收益")
+                        print(f"<i class='fas fa-exclamation-triangle text-yellow-500'></i> 未找到盯市分析结果文件，使用默认策略收益")
                         daily_abs_profit_for_bench = None
                         
                 except Exception as e:
-                    print(f"⚠️ 读取盯市分析结果失败: {e}")
+                    print(f"<i class='fas fa-exclamation-triangle text-yellow-500'></i> 读取盯市分析结果失败: {e}")
                     import traceback
                     traceback.print_exc()
                     daily_abs_profit_for_bench = None
@@ -6169,7 +6475,7 @@ class LightweightAnalysis:
                 except Exception:
                     optimal_bins = max(20, min(60, int(len(abs_vals) / 10)))
 
-                print(f"📊 绝对收益分布参数: 范围=¥{amount_range:,.0f}, bin数={optimal_bins}")
+                print(f"<i class='fas fa-chart-bar text-indigo-500'></i> 绝对收益分布参数: 范围=¥{amount_range:,.0f}, bin数={optimal_bins}")
 
                 fig_dist.add_trace(go.Histogram(
                     x=abs_vals,
@@ -6234,7 +6540,7 @@ class LightweightAnalysis:
                     optimal_bins = max(15, min(25, len(set(returns_pct)) // 2))
                 else:
                     optimal_bins = max(20, min(40, int(len(returns_pct) / 10)))
-                print(f"📊 收益分布参数(回退): 范围={returns_range:.3f}%, bin数={optimal_bins}")
+                print(f"<i class='fas fa-chart-bar text-indigo-500'></i> 收益分布参数(回退): 范围={returns_range:.3f}%, bin数={optimal_bins}")
                 fig_dist.add_trace(go.Histogram(
                     x=returns_pct,
                     nbinsx=optimal_bins,
@@ -6290,13 +6596,13 @@ class LightweightAnalysis:
             
     def execution_analysis(self):
         """交易执行分析"""
-        print("\n⚡ === 交易执行分析 ===")
+        print("\n<i class='fas fa-bolt text-yellow-400'></i> === 交易执行分析 ===")
         
         # === 日内交易平均持仓时间（按买入日） ===
         try:
             import pandas as _pd
             import numpy as _np
-            print("📥 加载配对交易数据用于持仓时间统计…")
+            print("<i class='fas fa-download text-blue-400'></i> 加载配对交易数据用于持仓时间统计…")
             _pairs = _pd.read_parquet('data/paired_trades_fifo.parquet')
             if len(_pairs) > 0:
                 # 统一时间戳
@@ -6492,11 +6798,11 @@ class LightweightAnalysis:
                         metrics=metrics,
                     )
                 else:
-                    print("⚠️ 无可用的日内持仓时间样本，跳过图表生成")
+                    print("<i class='fas fa-exclamation-triangle text-yellow-500'></i> 无可用的日内持仓时间样本，跳过图表生成")
             else:
-                print("⚠️ 配对交易数据为空，跳过持仓时间统计")
+                print("<i class='fas fa-exclamation-triangle text-yellow-500'></i> 配对交易数据为空，跳过持仓时间统计")
         except Exception as _e:
-            print(f"⚠️ 持仓时间统计失败: {_e}")
+            print(f"<i class='fas fa-exclamation-triangle text-yellow-500'></i> 持仓时间统计失败: {_e}")
 
         # 成交率分析
         self.df['fill_rate'] = self.df['tradeQty'] / self.df['orderQty']
@@ -6506,7 +6812,7 @@ class LightweightAnalysis:
         
         if len(daily_fill_rate) > 30:  # 至少30天数据
             # 诊断和修复：确保数据正确性
-            print(f"📊 成交率数据诊断：")
+            print(f"<i class='fas fa-chart-bar text-indigo-500'></i> 成交率数据诊断：")
             print(f"   日度成交率范围: {daily_fill_rate.min():.3f} - {daily_fill_rate.max():.3f}")
             print(f"   平均成交率: {daily_fill_rate.mean():.3f}")
             
@@ -6606,16 +6912,16 @@ class LightweightAnalysis:
                 metrics=fill_dist_metrics
             )
         else:
-            print("⚠️ 成交率数据为空，跳过分布图生成")
+            print("<i class='fas fa-exclamation-triangle text-yellow-500'></i> 成交率数据为空，跳过分布图生成")
         
     def _calculate_key_metrics(self, returns):
         """计算关键绩效指标"""
-        print("\n📈 关键绩效指标:")
+        print("\n<i class='fas fa-chart-line text-green-500'></i> 关键绩效指标:")
         
         # 安全的收益率计算 - 处理可能的异常值
         returns_clean = returns.dropna()
         if len(returns_clean) == 0:
-            print("❌ 无有效收益率数据")
+            print("<i class='fas fa-times-circle text-red-500'></i> 无有效收益率数据")
             return {}
             
         print(f"收益率数据范围: {returns_clean.min():.4f} 到 {returns_clean.max():.4f}, 均值: {returns_clean.mean():.4f}")
@@ -6657,7 +6963,7 @@ class LightweightAnalysis:
             }
             
         except Exception as e:
-            print(f"❌ 指标计算错误: {e}")
+            print(f"<i class='fas fa-times-circle text-red-500'></i> 指标计算错误: {e}")
             metrics = {
                 '总收益率': "计算错误",
                 '年化收益率': "计算错误",
@@ -6921,10 +7227,10 @@ class LightweightAnalysis:
             else:
                 metrics['盈亏比'] = "N/A"
             
-            # 3. 夏普比率 (Sharpe Ratio)
+            # 3. 夏普比率 (Sharpe Ratio) - 使用样本标准差（ddof=1）
             if len(strategy_daily_returns) > 1:
                 excess_return = strategy_daily_returns.mean()
-                volatility = strategy_daily_returns.std()
+                volatility = strategy_daily_returns.std(ddof=1)
                 if volatility > 0:
                     sharpe_ratio = (excess_return / volatility) * np.sqrt(252)  # 年化夏普比率
                     metrics['夏普比率'] = f"{sharpe_ratio:.3f}"
@@ -6941,7 +7247,7 @@ class LightweightAnalysis:
             metrics['最大回撤'] = f"{max_drawdown:.2%}"
             
         except Exception as e:
-            print(f"⚠️ 计算策略指标时出错: {e}")
+            print(f"<i class='fas fa-exclamation-triangle text-yellow-500'></i> 计算策略指标时出错: {e}")
             metrics['策略胜率'] = "计算错误"
             metrics['盈亏比'] = "计算错误"
             metrics['夏普比率'] = "计算错误"
@@ -7167,14 +7473,15 @@ class LightweightAnalysis:
             slot_sum: pd.DataFrame = payload.get('slot_summary', pd.DataFrame())
             ordered_slots: list = payload.get('ordered_slots', [])
             if slot_sum is None or len(slot_sum) == 0 or not ordered_slots:
-                print('⚠️ 时段分析：无可用数据，跳过图表渲染')
+                print("<i class='fas fa-exclamation-triangle text-yellow-500'></i> 时段分析：无可用数据，跳过图表渲染")
                 return
 
             # 主图：时段绝对收益条形图
             x_vals = ordered_slots
             slot_sum_indexed = slot_sum.set_index('slot').reindex(ordered_slots).fillna({'total_profit': 0.0})
             y_vals = slot_sum_indexed['total_profit'].astype(float).tolist()
-            colors = ['#2ecc71' if y >= 0 else '#e74c3c' for y in y_vals]
+            # 修正颜色：正红负绿
+            colors = ['#e53935' if y >= 0 else '#43a047' for y in y_vals]
 
             fig_main = go.Figure()
             fig_main.add_trace(go.Bar(x=x_vals, y=y_vals, marker_color=colors, name='绝对收益'))
@@ -7409,14 +7716,14 @@ class LightweightAnalysis:
             except Exception:
                 pass
         except Exception as e:
-            print(f"⚠️ 时段分析渲染失败: {e}")
+            print(f"<i class='fas fa-exclamation-triangle text-yellow-500'></i> 时段分析渲染失败: {e}")
             import traceback as _tb
             _tb.print_exc()
 
     def slot_performance_analysis(self):
         """时段盈利能力分析 - 基于配对交易的绝对收益"""
         print("\n" + "="*60)
-        print("⏰ 开始时段盈利能力分析（基于绝对收益）...")
+        print("<i class='fas fa-clock text-blue-400'></i> 开始时段盈利能力分析（基于绝对收益）...")
         print("="*60)
         
         try:
@@ -7577,6 +7884,7 @@ class LightweightAnalysis:
                                 lorenz_html = (
                                     '<div id="lorenz_curve" style="height:320px;width:100%;"></div>'
                                     '<script src="https://cdn.plot.ly/plotly-latest.min.js"></script>'
+                                    '<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">'
                                     '<script>'
                                     '(function(){'
                                     'var x=' + x_json + ';'
@@ -7610,12 +7918,12 @@ class LightweightAnalysis:
 
             
         except Exception as e:
-            print(f"❌ 时段分析出错: {e}")
+            print(f"<i class='fas fa-times-circle text-red-500'></i> 时段分析出错: {e}")
             import traceback
             traceback.print_exc()
 
         except Exception as e:
-            print(f"❌ 时段分析出错: {e}")
+            print(f"<i class='fas fa-times-circle text-red-500'></i> 时段分析出错: {e}")
             import traceback
             traceback.print_exc()
 
@@ -7794,6 +8102,12 @@ class LightweightAnalysis:
             """)
 
             def _build_fig_html(fig_obj, div_id: str) -> str:
+                # Force transparent background
+                fig_obj.update_layout({
+                    'paper_bgcolor': 'rgba(0,0,0,0)',
+                    'plot_bgcolor': 'rgba(0,0,0,0)',
+                    'font': {'family': '"Segoe UI", "Microsoft YaHei", sans-serif'}
+                })
                 fig_json = fig_obj.to_plotly_json()
                 fig_json_native = _to_native(fig_json)
                 fig_json_str = json.dumps(fig_json_native, ensure_ascii=False)
@@ -7834,6 +8148,8 @@ class LightweightAnalysis:
                 <meta name=\"viewport\" content=\"width=device-width, initial-scale=1\" />
                 <title>{title}</title>
                 <script src=\"https://cdn.plot.ly/plotly-latest.min.js\"></script>
+                <link rel=\"stylesheet\" href=\"https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css\">
+                <script src=\"https://cdn.tailwindcss.com\"></script>
                 <style>
                     body {{ font-family: Arial, sans-serif; margin: 20px; }}
                     h1 {{ margin: 0 0 15px 0; font-size: 22px; }}
@@ -7915,9 +8231,9 @@ class LightweightAnalysis:
             output_path.write_text(html, encoding='utf-8')
             self.figures.append((name, str(output_path)))
             file_size = output_path.stat().st_size / (1024*1024)
-            print(f"    ✅ 保存: {name}.html ({file_size:.2f} MB)")
+            print(f"    <i class='fas fa-check-circle text-green-500'></i> 保存: {name}.html ({file_size:.2f} MB)")
         except Exception as e:
-            print(f"    ❌ 保存失败 {name}: {e}")
+            print(f"    <i class='fas fa-times-circle text-red-500'></i> 保存失败 {name}: {e}")
             import traceback
             traceback.print_exc()
             
@@ -7961,7 +8277,7 @@ class LightweightAnalysis:
                     base_cols = [c for c in base_cols if c in self.df.columns]
                     od = self.df[base_cols].copy()
                 if len(od) == 0:
-                    print("⚠️ 订单数据为空，跳过资金占用分析")
+                    print("<i class='fas fa-exclamation-triangle text-yellow-500'></i> 订单数据为空，跳过资金占用分析")
                     return
                 tcol = 'tradeTimestamp' if 'tradeTimestamp' in od.columns else 'Timestamp'
                 od = od.dropna(subset=['Code','direction','tradeQty','tradeAmount','fee',tcol]).copy()
@@ -8077,7 +8393,7 @@ class LightweightAnalysis:
             # 2) 资金占用收益率 = 日PnL / 当日最低所需本金
             mtm_file = Path("mtm_analysis_results/daily_nav_revised.csv")
             if not mtm_file.exists():
-                print("⚠️ 未找到盯市数据，跳过资金占用收益率")
+                print("<i class='fas fa-exclamation-triangle text-yellow-500'></i> 未找到盯市数据，跳过资金占用收益率")
                 return
             nav = _pd.read_csv(mtm_file)
             def _parse_cur(v):
@@ -8161,7 +8477,7 @@ class LightweightAnalysis:
             )
             print("[OK] 每日最低所需本金 + 资金占用收益率 已生成")
         except Exception as e:
-            print(f"❌ 资金占用分析失败: {e}")
+            print(f"<i class='fas fa-times-circle text-red-500'></i> 资金占用分析失败: {e}")
 
     def _save_figure_pair_with_details_v2(self, fig_top, fig_bottom, name: str, title: str, explanation_html: str, metrics_primary: dict, metrics_secondary: dict, primary_title: str, secondary_title: str):
         """在同一页面上下展示两张图：上=交易金额占比，下=盈利金额占比。
@@ -8260,6 +8576,8 @@ class LightweightAnalysis:
                 <meta name=\"viewport\" content=\"width=device-width, initial-scale=1\" />
                 <title>{title}</title>
                 <script src=\"https://cdn.plot.ly/plotly-latest.min.js\"></script>
+                <link rel=\"stylesheet\" href=\"https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css\">
+                <script src=\"https://cdn.tailwindcss.com\"></script>
                 <style>
                     body {{ font-family: Arial, sans-serif; margin: 20px; }}
                     h1 {{ margin: 0 0 15px 0; font-size: 22px; }}
@@ -8291,9 +8609,9 @@ class LightweightAnalysis:
             output_path.write_text(html, encoding='utf-8')
             self.figures.append((name, str(output_path)))
             file_size = output_path.stat().st_size / (1024*1024)
-            print(f"    ✅ 保存: {name}.html ({file_size:.2f} MB)")
+            print(f"    <i class='fas fa-check-circle text-green-500'></i> 保存: {name}.html ({file_size:.2f} MB)")
         except Exception as e:
-            print(f"    ❌ 保存失败 {name}: {e}")
+            print(f"    <i class='fas fa-times-circle text-red-500'></i> 保存失败 {name}: {e}")
 
     def _save_figure_triple_with_details(self, fig1, fig2, fig3, name: str, title: str, explanation_html: str, metrics_primary: dict, metrics_secondary: dict, title1: str, title2: str, title3: str):
         """保存三个图表的页面（dashboard预览时纵向，新窗口打开时两列）"""
@@ -8366,6 +8684,9 @@ class LightweightAnalysis:
                 <meta name="viewport" content="width=device-width, initial-scale=1" />
                 <title>{title}</title>
                 <script src="https://cdn.plot.ly/plotly-latest.min.js"></script>
+                <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+                
+                <script src="https://cdn.tailwindcss.com"></script>
                 <style>
                     body {{ font-family: Arial, sans-serif; margin: 20px; }}
                     h1 {{ margin: 0 0 15px 0; font-size: 22px; }}
@@ -8417,21 +8738,26 @@ class LightweightAnalysis:
             output_path.write_text(html, encoding='utf-8')
             self.figures.append((name, str(output_path)))
             file_size = output_path.stat().st_size / (1024*1024)
-            print(f"    ✅ 保存: {name}.html ({file_size:.2f} MB)")
+            print(f"    <i class='fas fa-check-circle text-green-500'></i> 保存: {name}.html ({file_size:.2f} MB)")
         except Exception as e:
-            print(f"    ❌ 保存失败 {name}: {e}")
+            print(f"    <i class='fas fa-times-circle text-red-500'></i> 保存失败 {name}: {e}")
 
     def create_lightweight_dashboard(self):
-        """创建轻量级仪表板"""
-        print("\n🎛️ 创建轻量级仪表板...")
-        # 计算“首日收市总资产”（优先使用盯市NAV；否则按现金变动+多空持仓估值；假设首日前一日无持仓）
+        """创建轻量级仪表板（Tailwind CSS版）"""
+        print("\n<i class='fas fa-sliders-h text-gray-600'></i> 创建轻量级仪表板...")
+        
+        # 获取关键绩效指标，若未计算则使用默认值
+        metrics = getattr(self, 'strategy_metrics', {})
+        total_return = metrics.get('total_return_nav', 'N/A')
+        max_drawdown = metrics.get('max_drawdown', 'N/A')
+        sharpe = metrics.get('sharpe_ratio', 'N/A')
+        win_rate = metrics.get('win_rate', 'N/A')
+        
+        # 获取首日资产信息
         first_day_assets_display = "N/A"
-        first_day_str = ""
-        # 计算“首日最低所需本金（现金占用峰值）”
-        first_day_min_capital_display = "N/A"
         first_day_initial_capital_display = "N/A"
-        init_capital_factor = 1.3  # 默认安全系数，若读取授信规则成功则会覆盖
-        init_cap_reestimated = np.nan
+        first_day_min_capital_display = "N/A"
+        
         try:
             mtm_file = Path("mtm_analysis_results/daily_nav_revised.csv")
             if mtm_file.exists():
@@ -8448,360 +8774,92 @@ class LightweightAnalysis:
                 mtm_df['date'] = pd.to_datetime(mtm_df['date']).dt.date
                 mtm_df = mtm_df.sort_values('date')
                 if len(mtm_df) > 0:
-                    first_day_str = str(mtm_df['date'].iloc[0])
                     first_nav = _parse_currency(mtm_df['total_assets'].iloc[0])
                     if pd.notna(first_nav):
                         first_day_assets_display = f"¥{first_nav:,.0f}"
-            else:
-                # 回退：从订单与收盘价估算（现金变动 + 多头市值 − 空头市值）
-                orders_cols = ['Code','direction','tradeQty','tradeAmount','fee','Timestamp']
-                orders_df = pd.read_parquet(self.data_path, columns=orders_cols)
-                orders_df = orders_df.dropna(subset=['direction','tradeQty','tradeAmount','fee','Timestamp']).copy()
-                orders_df['date'] = pd.to_datetime(orders_df['Timestamp']).dt.date
-                if len(orders_df) > 0:
-                    first_day = orders_df['date'].min()
-                    first_day_str = str(first_day)
-                    day_df = orders_df[orders_df['date'] == first_day].copy()
-                    sell_amt = float(day_df.loc[day_df['direction']=='S', 'tradeAmount'].sum())
-                    buy_amt = float(day_df.loc[day_df['direction']=='B', 'tradeAmount'].sum())
-                    fees = float(day_df['fee'].sum())
-                    # 推断最小初始现金（全周期）：保证现金不为负
-                    flows = orders_df.groupby(['date','direction'])[['tradeAmount','fee']].sum().unstack(fill_value=0)
-                    flows.columns = [f"{a}_{b}" for a,b in flows.columns]
-                    buy_all = flows.get('tradeAmount_B', 0.0)
-                    sell_all = flows.get('tradeAmount_S', 0.0)
-                    fee_all = flows.get('fee_B', 0.0) + flows.get('fee_S', 0.0)
-                    net_out = (buy_all + fee_all - sell_all).cumsum()
-                    inferred_init_cash = float(max(0.0, net_out.max() if len(net_out)>0 else 0.0))
-                    cash_eod = inferred_init_cash + sell_amt - buy_amt - fees
-                    qty_signed = day_df['tradeQty'].astype('int64')
-                    day_df['signed_qty'] = qty_signed * np.where(day_df['direction']=='B', 1, -1)
-                    pos = day_df.groupby('Code')['signed_qty'].sum().reset_index()
-                    long_value = 0.0
-                    short_value = 0.0
-                    close_path = Path('data/daily_close_cache.parquet')
-                    if close_path.exists() and len(pos) > 0:
-                        close_df = pd.read_parquet(close_path)
-                        close_df = close_df.rename(columns={'Date':'date','trade_date':'date','timestamp':'date','close_price':'close','last_price':'close','Close':'close','code':'Code'})
-                        close_df['date'] = pd.to_datetime(close_df['date']).dt.date
-                        px = close_df[close_df['date'] == first_day][['Code','close']].dropna()
-                        merged = pos.merge(px, on='Code', how='left')
-                        merged['close'] = merged['close'].fillna(0.0)
-                        long_value = float((merged.loc[merged['signed_qty']>0, 'signed_qty'] * merged.loc[merged['signed_qty']>0, 'close']).sum())
-                        short_value = float(((-merged.loc[merged['signed_qty']<0, 'signed_qty']) * merged.loc[merged['signed_qty']<0, 'close']).sum())
-                    # 资产估算：现金 + 多头市值 − 空头市值（注意：此为相对口径，因未知初始现金）
-                    first_day_assets_display = f"¥{(cash_eod + long_value - short_value):,.0f}"
-
-            # 计算首日最低所需本金（根据授信规则：平多/开空与保证金、现金可用性、费用计提等）
-            try:
-                # 载入授信规则
-                self._ensure_credit_rules_loaded()
-                init_capital_factor = float(self._credit_rules.get('initial_capital_factor', init_capital_factor))
-                allow_short_cash = bool(self._credit_rules.get('allow_short_proceeds_to_cash', False))
-                allow_sell_long_t0 = bool(self._credit_rules.get('allow_sell_long_cash_T0', True))
-                short_margin_ratio = float(self._credit_rules.get('margin_short_ratio', 0.5))
-                fee_accrual = str(self._credit_rules.get('fee_accrual', 'realtime')).lower()
-
-                need_cols = ['Code','direction','tradeQty','tradeAmount','fee','price','tradeTimestamp','Timestamp']
-                try:
-                    cols_meta = set(self._parquet_columns(self.data_path))
-                except Exception:
-                    cols_meta = set()
-                base_cols = [c for c in need_cols if c in cols_meta] if cols_meta else need_cols
-                try:
-                    df0 = pd.read_parquet(self.data_path, columns=base_cols)
-                except Exception:
-                    base_cols = [c for c in base_cols if c in getattr(self, 'df', pd.DataFrame()).columns]
-                    df0 = getattr(self, 'df', pd.DataFrame())[base_cols].copy() if base_cols else pd.DataFrame()
-                tcol = 'tradeTimestamp' if 'tradeTimestamp' in df0.columns else 'Timestamp'
-                df0 = df0.dropna(subset=['Code','direction','tradeQty','tradeAmount','fee',tcol]).copy()
-                if len(df0) > 0:
-                    df0[tcol] = pd.to_datetime(df0[tcol])
-                    df0['__rowid__'] = np.arange(len(df0))
-                    df0['date_trade'] = df0[tcol].dt.date
-                    first_trade_day = df0['date_trade'].min()
-                    d = df0[df0['date_trade'] == first_trade_day].copy()
-                    # 稳定排序：主序=tcol，次序=Timestamp（若有），再行号
-                    if 'Timestamp' in d.columns:
-                        d['Timestamp'] = pd.to_datetime(d['Timestamp'])
-                        d = d.sort_values([tcol, 'Timestamp', '__rowid__'])
-                    else:
-                        d = d.sort_values([tcol, '__rowid__'])
-
-                    cash_free = 0.0
-                    positions: dict = {}
-                    last_price: dict = {}
-                    max_required = 0.0
-                    fees_buffer_eod = 0.0
-                    short_mv_total = 0.0
-
-                    for _, r in d.iterrows():
-                        code = r['Code']
-                        qty = int(r['tradeQty'])
-                        amt = float(r['tradeAmount'])
-                        fee = float(r['fee']) if not pd.isna(r['fee']) else 0.0
-                        px = float(r['price']) if ('price' in r and not pd.isna(r['price'])) else (amt / qty if qty > 0 else 0.0)
-                        pos_cur = int(positions.get(code, 0))
-
-                        if r['direction'] == 'B':
-                            # 买入：现金减少；费用按计提口径处理
-                            if fee_accrual == 'realtime':
-                                cash_free -= (amt + fee)
-                            else:
-                                cash_free -= amt
-                                fees_buffer_eod += fee
-                            # 更新空头市值贡献
-                            old_lp = last_price.get(code, px)
-                            old_neg = max(-pos_cur, 0)
-                            new_pos = pos_cur + qty
-                            new_neg = max(-new_pos, 0)
-                            last_price[code] = px
-                            positions[code] = new_pos
-                            short_mv_total += (new_neg * px) - (old_neg * old_lp)
-                        else:
-                            # 卖出：先平多，再开空
-                            close_qty = min(max(pos_cur, 0), qty)
-                            open_short_qty = qty - close_qty
-                            # 平多部分：是否 T+0 回补现金
-                            if close_qty > 0:
-                                portion = close_qty / qty
-                                if allow_sell_long_t0:
-                                    if fee_accrual == 'realtime':
-                                        cash_free += (amt * portion) - (fee * portion)
-                                    else:
-                                        cash_free += (amt * portion)
-                                        fees_buffer_eod += (fee * portion)
-                                # 不允许 T+0 时，可用现金不变
-                                # 更新空头市值贡献
-                                old_lp = last_price.get(code, px)
-                                old_neg = max(-pos_cur, 0)
-                                new_pos = pos_cur - close_qty
-                                new_neg = max(-new_pos, 0)
-                                last_price[code] = px
-                                positions[code] = new_pos
-                                short_mv_total += (new_neg * px) - (old_neg * old_lp)
-                                pos_cur = new_pos
-                            # 开空部分：是否将卖出所得计入可用现金
-                            if open_short_qty > 0:
-                                portion = open_short_qty / qty
-                                if allow_short_cash:
-                                    if fee_accrual == 'realtime':
-                                        cash_free += (amt * portion) - (fee * portion)
-                                    else:
-                                        cash_free += (amt * portion)
-                                        fees_buffer_eod += (fee * portion)
-                                else:
-                                    # 不计入现金，仅扣费用
-                                    if fee_accrual == 'realtime':
-                                        cash_free -= (fee * portion)
-                                    else:
-                                        fees_buffer_eod += (fee * portion)
-                                # 更新空头市值贡献
-                                old_lp = last_price.get(code, px)
-                                old_neg = max(-pos_cur, 0)
-                                new_pos = pos_cur - open_short_qty
-                                new_neg = max(-new_pos, 0)
-                                last_price[code] = px
-                                positions[code] = new_pos
-                                short_mv_total += (new_neg * px) - (old_neg * old_lp)
-
-                        # 计算空头市值与保证金
-                        short_margin = short_mv_total * short_margin_ratio
-                        # 若费用为日终计提，此刻不扣减费用
-                        required_equity = max(0.0, -cash_free) + short_margin
-                        if required_equity > max_required:
-                            max_required = required_equity
-
-                    # 日终计提费用时，再评估一次峰值
-                    if fee_accrual != 'realtime' and fees_buffer_eod > 0:
-                        cash_for_req = cash_free - fees_buffer_eod
-                        short_margin = short_mv_total * short_margin_ratio
-                        required_equity = max(0.0, -cash_for_req) + short_margin
-                        if required_equity > max_required:
-                            max_required = required_equity
-
-                    if max_required > 0:
-                        init_cap_reestimated = float(max_required) * float(init_capital_factor)
-                        first_day_min_capital_display = f"¥{max_required:,.0f}"
-                        first_day_initial_capital_display = f"¥{init_cap_reestimated:,.0f}"
-            except Exception:
-                first_day_min_capital_display = "N/A"
+                        
+            # 获取首日最低所需本金快照
+            snapshot = Path('reports/first_day_capital_snapshot.json')
+            if snapshot.exists():
+                data = json.loads(snapshot.read_text(encoding='utf-8'))
+                val = float(data.get('first_day_min_required_equity', float('nan')))
+                if not math.isnan(val) and val > 0:
+                    first_day_min_capital_display = f"¥{val:,.0f}"
+                    # 获取安全系数
+                    self._ensure_credit_rules_loaded()
+                    factor = float(self._credit_rules.get('initial_capital_factor', 1.3))
+                    first_day_initial_capital_display = f"¥{(val * factor):,.0f}"
         except Exception:
-            first_day_assets_display = "N/A"
-
-        # 若计算首日最低所需本金失败且已有快照，则尝试回退到快照结果
-        if first_day_min_capital_display == "N/A":
-            try:
-                snapshot = Path('reports/first_day_capital_snapshot.json')
-                if snapshot.exists():
-                    data = json.loads(snapshot.read_text(encoding='utf-8'))
-                    val = float(data.get('first_day_min_required_equity', float('nan')))
-                    if not math.isnan(val) and val > 0:
-                        first_day_min_capital_display = f"¥{val:,.0f}"
-                        first_day_initial_capital_display = f"¥{(val * init_capital_factor):,.0f}"
-            except Exception:
-                pass
+            pass
 
         dashboard_html = f"""
         <!DOCTYPE html>
-        <html>
+        <html lang="zh-CN">
         <head>
-            <title>轻量级量化策略分析报告</title>
             <meta charset="utf-8">
             <meta name="viewport" content="width=device-width, initial-scale=1">
-            <!-- 添加网页图标 -->
+            <title>轻量级量化策略分析报告</title>
+            <script src="https://cdn.tailwindcss.com"></script>
+            
+            <script src="https://cdn.plot.ly/plotly-latest.min.js"></script>
+                <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
             <link rel="icon" href="data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMzIiIGhlaWdodD0iMzIiIHZpZXdCb3g9IjAgMCAzMiAzMiIgZmlsbD0ibm9uZSIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj4KPHJlY3Qgd2lkdGg9IjMyIiBoZWlnaHQ9IjMyIiByeD0iOCIgZmlsbD0iIzM0OThkYiIvPgo8cGF0aCBkPSJNOCAxMkwxNiA4TDI0IDEyTDE2IDE2TDggMTJaIiBmaWxsPSJ3aGl0ZSIvPgo8cGF0aCBkPSJNOCAxOEwxNiAxNEwyNCAxOEwxNiAyMkw4IDE4WiIgZmlsbD0id2hpdGUiLz4KPHN2Zz4K" type="image/svg+xml">
             <style>
-                body {{ 
-                    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; 
-                    margin: 0; 
-                    padding: 20px;
-                    background: linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%);
-                    min-height: 100vh;
-                }}
-                .container {{ max-width: 1200px; margin: 0 auto; }}
-                .header {{ 
-                    text-align: center; 
-                    background: white;
-                    padding: 30px; 
-                    border-radius: 15px;
-                    margin-bottom: 30px;
-                    box-shadow: 0 4px 15px rgba(0,0,0,0.1);
-                }}
-                .header h1 {{ color: #2c3e50; margin: 0; }}
-                .header h2 {{ color: #3498db; margin: 10px 0; font-weight: 300; }}
-                .metrics-grid {{ 
-                    display: grid; 
-                    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); 
-                    gap: 15px; 
-                    margin: 20px 0;
-                }}
-                .metric-card {{ 
-                    background: white; 
-                    padding: 20px; 
-                    border-radius: 10px;
-                    text-align: center;
-                    box-shadow: 0 2px 10px rgba(0,0,0,0.1);
-                    border-left: 4px solid #3498db;
-                }}
-                .metric-value {{ font-size: 1.5em; font-weight: bold; color: #2c3e50; }}
-                .metric-label {{ color: #7f8c8d; margin-top: 5px; }}
-                .metric-sub {{ display:block; margin-top:4px; font-size:0.75em; color:#95a5a6; }}
-                .chart-section {{ 
-                    margin: 30px 0;
-                }}
-                .section-divider {{
-                    height: 2px;
-                    background: linear-gradient(to right, #3498db, transparent);
-                    margin: 40px 0;
-                    border-radius: 1px;
-                }}
-                .section-title {{
-                    font-size: 1.3em;
-                    font-weight: bold;
-                    color: #2c3e50;
-                    margin: 30px 0 20px 0;
-                    padding-left: 15px;
-                    border-left: 4px solid #3498db;
-                }}
-                .main-chart-container {{
-                    margin: 20px 0;
-                }}
-                .main-chart-card {{ 
-                    background: white; 
-                    border-radius: 10px; 
-                    padding: 15px;
-                    box-shadow: 0 4px 15px rgba(0,0,0,0.15);
-                    border-left: 4px solid #e74c3c;
-                }}
-                .main-chart-card iframe {{
-                    width: 100%;
-                    height: 500px;
-                    border: none;
-                    border-radius: 8px;
-                }}
-                .charts-grid {{ 
-                    display: grid; 
-                    grid-template-columns: repeat(auto-fit, minmax(500px, 1fr)); 
-                    gap: 20px; 
-                    margin: 20px 0;
-                }}
-                .chart-card {{ 
-                    background: white; 
-                    border-radius: 10px; 
-                    padding: 10px;
-                    box-shadow: 0 2px 10px rgba(0,0,0,0.1);
-                }}
-                .performance-badge {{ 
-                    display: inline-block; 
-                    padding: 5px 10px; 
-                    border-radius: 15px; 
-                    font-size: 0.9em;
-                    margin: 5px;
-                }}
-                .badge-good {{ background: #2ecc71; color: white; }}
-                .badge-warning {{ background: #f39c12; color: white; }}
-                .badge-danger {{ background: #e74c3c; color: white; }}
-                iframe {{ 
-                    width: 100%; 
-                    height: 520px; 
-                    border: none; 
-                    border-radius: 5px;
-                }}
-                .footer {{ 
-                    text-align: center; 
-                    margin-top: 40px; 
-                    color: #7f8c8d; 
-                    font-size: 0.9em;
-                }}
+                /* 自定义字体栈 */
+                body {{ font-family: "Inter", "Segoe UI", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", sans-serif; }}
+                /* 隐藏 Plotly 的 modebar */
+                .js-plotly-plot .plotly .modebar {{ display: none !important; }}
             </style>
         </head>
-        <body>
-            <div class="container">
-                <div class="header">
-                    <h1>🚀 轻量级量化策略分析报告</h1>
-                    <h2>优化浏览器加载性能 · 快速洞察策略表现</h2>
-                    <p>生成时间: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')} | 数据量: {len(self.df):,} 条</p>
-                    <div>
-                        <span class="performance-badge badge-good">✅ 轻量级设计</span>
-                        <span class="performance-badge badge-good">🔄 智能采样</span>
-                        <span class="performance-badge badge-good">📱 快速加载</span>
+        <body class="bg-gray-50 text-gray-800 min-h-screen p-6">
+            <div class="max-w-7xl mx-auto">
+                <!-- Header -->
+                <header class="bg-white rounded-xl shadow-sm p-8 mb-8 text-center border-t-4 border-blue-500">
+                    <h1 class="text-3xl font-bold text-gray-900 mb-2"><i class='fas fa-rocket text-blue-500'></i> 轻量级量化策略分析报告</h1>
+                    <div class="flex justify-center items-center space-x-4 text-sm text-gray-500 mb-4">
+                        <span><i class='far fa-calendar-alt text-gray-500'></i> 生成时间: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}</span>
+                        <span><i class='fas fa-chart-bar text-indigo-500'></i> 数据量: {len(self.df):,} 条</span>
                     </div>
-                    <div style="background:#fffbe6;border-left:4px solid #f1c40f;padding:10px 12px;border-radius:6px;color:#6b5e00;margin-top:12px;text-align:left;font-size:0.95em;">
-                        <b>口径说明</b>：
-                        <ul style="margin:6px 0 0 18px; padding:0;">
-                            <li><b>初始本金真实金额不明，暂定为 62,090,808元</b>：基于首日最低所需本金（47,762,160元）× 安全系数1.3计算。首日最低所需本金考虑了：现金占用峰值 + 空头保证金（50%）+ 多头资金占用 + 授信规则（T+0可用、开空所得处理等）。</li>
-                            <li><b>资金计算</b>：所有涉及现金余额、总资产的页面均基于此正确的初始本金重新计算，不使用盯市文件中的错误数据。</li>
-                            <li><b>假设</b>：首日前一日无持仓；因此首日收市后仍持有到次日的仓位（含多头/空头）均计入首日资产。</li>
-                            <li><b>real字段意义不明</b>：暂定为十分钟后的价格变动幅度（经过固定比例缩放）。</li>
-                        </ul>
+                </header>
+
+                <!-- KPI Cards (Pyramid Level 1) -->
+                <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
+                    <!-- Total Return -->
+                    <div class="bg-white rounded-xl shadow-sm p-6 border-l-4 border-[#e53935]">
+                        <div class="text-sm text-gray-500 uppercase tracking-wide font-semibold mb-1">总收益率 (NAV)</div>
+                        <div class="text-3xl font-bold text-[#e53935]">{total_return}</div>
                     </div>
-                </div>
-                
-                <div class="metrics-grid">
-                    <div class="metric-card">
-                        <div class="metric-value">{len(self.figures)}</div>
-                        <div class="metric-label">生成图表</div>
+                    <!-- Max Drawdown -->
+                    <div class="bg-white rounded-xl shadow-sm p-6 border-l-4 border-yellow-500">
+                        <div class="text-sm text-gray-500 uppercase tracking-wide font-semibold mb-1">最大回撤</div>
+                        <div class="text-3xl font-bold text-yellow-600">{max_drawdown}</div>
                     </div>
-                    <div class="metric-card">
-                        <div class="metric-value">{len(self.df):,}</div>
-                        <div class="metric-label">分析数据量</div>
+                    <!-- Sharpe Ratio -->
+                    <div class="bg-white rounded-xl shadow-sm p-6 border-l-4 border-blue-500">
+                        <div class="text-sm text-gray-500 uppercase tracking-wide font-semibold mb-1">夏普比率</div>
+                        <div class="text-3xl font-bold text-blue-600">{sharpe}</div>
                     </div>
-                    <div class="metric-card">
-                        <div class="metric-value">{first_day_assets_display}</div>
-                        <div class="metric-label">首日收市总资产</div>
-                    </div>
-                    <div class="metric-card">
-                        <div class="metric-value">{first_day_initial_capital_display}</div>
-                        <div class="metric-label">估算初始本金<br/><span class="metric-sub">首日最低所需本金 {first_day_min_capital_display}</span></div>
+                    <!-- Win Rate -->
+                    <div class="bg-white rounded-xl shadow-sm p-6 border-l-4 border-[#e53935]">
+                        <div class="text-sm text-gray-500 uppercase tracking-wide font-semibold mb-1">胜率 (日度)</div>
+                        <div class="text-3xl font-bold text-gray-800">{win_rate}</div>
                     </div>
                 </div>
                 
+                <!-- Info Banner -->
+                <div class="bg-yellow-50 border-l-4 border-yellow-400 p-4 mb-8 rounded-r text-sm text-yellow-800">
+                    <p class="font-bold mb-1"><i class='fas fa-lightbulb text-yellow-500'></i> 口径说明</p>
+                    <ul class="list-disc list-inside space-y-1 ml-2">
+                        <li><b>初始本金</b>：暂定为 <b>{first_day_initial_capital_display}</b> (基于首日最低所需本金 {first_day_min_capital_display} × 安全系数)。</li>
+                        <li><b>资金计算</b>：涉及现金/总资产的页面均基于此修正本金重算。</li>
+                        <li><b>假设</b>：首日前一日无持仓，首日收市持仓全额计入。</li>
+                    </ul>
+                </div>
         """
         
         # 定义图表分类和排序 - 区分主图表和副图表
         chart_categories = {
-            '💰 策略收益分析': {
+            "<i class='fas fa-coins text-yellow-500'></i> 策略收益分析": {
                 'main': [
                     ('daily_absolute_profit_light', '日度绝对盈利（盯市）'),
                     ('daily_returns_initial_capital_light', '日收益率曲线（以首日总资产为本金）'),
@@ -8814,7 +8872,7 @@ class LightweightAnalysis:
                     ('capital_utilization_light', '每日最低所需本金 + 资金占用收益率'),
                 ]
             },
-            '📊 模型性能分析': {
+            "<i class='fas fa-chart-bar text-indigo-500'></i> 模型性能分析": {
                 'main': [
                     ('strategy_sharpe_nav', '夏普比率（真实净值口径）'),
                     ('ic_timeseries_light', 'IC时间序列（含极端信号组追踪）'),
@@ -8826,14 +8884,14 @@ class LightweightAnalysis:
                     ('ic_stability_industry_light', 'IC按行业分段（T+1）'),
                 ]
             },
-            '🎯 预测有效性分析': {
+            "<i class='fas fa-bullseye text-red-500'></i> 预测有效性分析": {
                 'main': [
                     ('pred_real_relationship_light', '预测值与实际收益关系分析（轻量化）'),
                 ],
                 'sub': [
                 ]
             },
-            '📊 投资组合分析': {
+            "<i class='fas fa-chart-bar text-indigo-500'></i> 投资组合分析": {
                 'main': [
                     ('factor_attribution_main', '因子归因（FF3）主页面'),
                     ('portfolio_composition_light', '收盘后持仓市值（轻量化）'),
@@ -8847,7 +8905,7 @@ class LightweightAnalysis:
                     ('amount_by_board_pie_light', '按交易所板块的交易/盈利占比（轻量化）'),
                 ]
             },
-                '⚡ 交易执行分析': {
+                "<i class='fas fa-bolt text-yellow-400'></i> 交易执行分析": {
                     'main': [
                         ('fill_rate_timeseries_light', '成交率时间序列（轻量化）'),
                     ],
@@ -8857,7 +8915,7 @@ class LightweightAnalysis:
                         ('entry_exit_rank_baostock_full', '择时能力分布（5min行情，全量）'),
                     ]
                 },
-            '💸 滑点成本分析': {
+            "<i class='fas fa-money-bill-wave text-green-600'></i> 滑点成本分析": {
                 'main': [
                     ('total_cost_light', '综合交易成本分析（轻量化）'),
                 ],
@@ -8866,7 +8924,7 @@ class LightweightAnalysis:
                     ('price_slippage_light', '价格滑点分析（轻量化）'),
                 ]
             },
-            '⏰ 时段盈利能力分析': {
+            "<i class='fas fa-clock text-blue-400'></i> 时段盈利能力分析": {
                 'main': [
                     ('slot_intraday_profit_waterfall_light', '日内时段绝对收益瀑布图（全样本期总贡献）'),
                 ],
@@ -8884,7 +8942,6 @@ class LightweightAnalysis:
         }
         
         # 创建现有图表的映射
-        # 将外部生成的择时能力图表（baostock 5min 版本）纳入自助链接
         extra_figs = [
             ('entry_exit_rank_baostock_full', 'reports/entry_exit_rank_baostock_full.html'),
             ('entry_exit_rank_baostock_full', 'docs/entry_exit_rank_baostock_full.html'),
@@ -8898,48 +8955,51 @@ class LightweightAnalysis:
         
         # 按分类生成图表 - 区分主图表和副图表布局
         for category, chart_groups in chart_categories.items():
-            # 检查该分类是否有可用的图表
             main_charts = [(name, title) for name, title in chart_groups['main'] if name in available_figures]
             sub_charts = [(name, title) for name, title in chart_groups['sub'] if name in available_figures]
             
             if main_charts or sub_charts:
                 dashboard_html += f"""
-                <div class="section-title">{category}</div>
+                <div class="mb-12">
+                    <div class="flex items-center mb-6">
+                        <div class="w-1 h-8 bg-blue-500 rounded-full mr-3"></div>
+                        <h3 class="text-2xl font-bold text-gray-800">{category}</h3>
+                    </div>
                 """
                 
-                # 主图表 - 独占一行
+                # 主图表 - 独占一行 (Full Width)
                 if main_charts:
                     for chart_name, chart_title in main_charts:
                         chart_path = available_figures[chart_name]
                         dashboard_html += f"""
-                        <div class="main-chart-container">
-                            <div class="main-chart-card">
-                                <iframe src="{Path(chart_path).name}" loading="lazy"></iframe>
-                                <p style="text-align: center; margin-top: 8px; margin-bottom: 5px;">
-                                    <a href="{Path(chart_path).name}" target="_blank" style="color: #3498db; text-decoration: none; font-size: 0.9em;">
-                                        🔗 在新窗口打开
+                        <div class="mb-8">
+                            <div class="bg-white rounded-xl shadow-sm p-1 border-l-4 border-[#e53935] overflow-hidden">
+                                <iframe src="{Path(chart_path).name}" class="w-full h-[520px] border-none rounded-lg" loading="lazy"></iframe>
+                                <div class="text-center py-2 bg-gray-50 border-t border-gray-100">
+                                    <a href="{Path(chart_path).name}" target="_blank" class="text-blue-600 hover:text-blue-800 text-sm font-medium transition-colors">
+                                        <i class='fas fa-external-link-alt'></i> 在新窗口打开全屏查看
                                     </a>
-                                </p>
+                                </div>
                             </div>
                         </div>
                         """
                 
-                # 副图表 - 一行两个
+                # 副图表 - 网格布局 (Grid)
                 if sub_charts:
                     dashboard_html += f"""
-                    <div class="charts-grid">
+                    <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
                     """
                     
                     for chart_name, chart_title in sub_charts:
                         chart_path = available_figures[chart_name]
                         dashboard_html += f"""
-                        <div class="chart-card">
-                            <iframe src="{Path(chart_path).name}" loading="lazy"></iframe>
-                            <p style="text-align: center; margin-top: 8px; margin-bottom: 5px;">
-                                <a href="{Path(chart_path).name}" target="_blank" style="color: #3498db; text-decoration: none; font-size: 0.9em;">
-                                    🔗 在新窗口打开
+                        <div class="bg-white rounded-xl shadow-sm p-1 overflow-hidden">
+                            <iframe src="{Path(chart_path).name}" class="w-full h-[520px] border-none rounded-lg" loading="lazy"></iframe>
+                            <div class="text-center py-2 bg-gray-50 border-t border-gray-100">
+                                <a href="{Path(chart_path).name}" target="_blank" class="text-blue-600 hover:text-blue-800 text-sm font-medium transition-colors">
+                                    <i class='fas fa-external-link-alt'></i> 在新窗口打开
                                 </a>
-                            </p>
+                            </div>
                         </div>
                         """
                     
@@ -8948,14 +9008,15 @@ class LightweightAnalysis:
                     """
                 
                 dashboard_html += """
-                <div class="section-divider"></div>
+                </div>
+                <div class="h-px bg-gradient-to-r from-transparent via-gray-200 to-transparent my-10"></div>
                 """
             
         dashboard_html += """
-                <div class="footer">
-                    <p>🎯 轻量级设计 · 🚀 快速分析 · 📊 专业洞察</p>
-                    <p>优化策略: 智能采样 + CDN加载 + 数据压缩</p>
-                </div>
+                <footer class="text-center text-gray-400 text-sm py-8">
+                    <p><i class='fas fa-bullseye text-red-500'></i> 轻量级设计 · <i class='fas fa-rocket text-blue-500'></i> 快速分析 · <i class='fas fa-chart-bar text-indigo-500'></i> 专业洞察</p>
+                    <p class="mt-1">优化策略: 智能采样 + CDN加载 + 数据压缩 + Tailwind CSS</p>
+                </footer>
             </div>
         </body>
         </html>
@@ -8966,7 +9027,7 @@ class LightweightAnalysis:
         with open(dashboard_path, 'w', encoding='utf-8') as f:
             f.write(dashboard_html)
 
-        # 为兼容历史引用，保留 lightweight_dashboard.html，并通过 Meta Refresh 跳转至新的 index.html
+        # 兼容旧版重定向
         legacy_dashboard_path = self.reports_dir / "lightweight_dashboard.html"
         legacy_redirect = """<!DOCTYPE html>
 <html lang="zh-CN">
@@ -8975,20 +9036,18 @@ class LightweightAnalysis:
     <meta http-equiv="refresh" content="0; url=index.html">
     <title>轻量级仪表板已迁移</title>
 </head>
-<body style="font-family:Segoe UI,Tahoma,Geneva,Verdana,sans-serif; text-align:center; padding-top:60px;">
+<body style="font-family:system-ui,sans-serif;text-align:center;padding-top:60px;">
     <h2>轻量级仪表板已迁移至 <a href="index.html">index.html</a></h2>
-    <p>如果浏览器未自动跳转，请点击以上链接访问最新页面。</p>
 </body>
 </html>
 """
         try:
             with open(legacy_dashboard_path, 'w', encoding='utf-8') as legacy_file:
                 legacy_file.write(legacy_redirect)
-        except Exception as legacy_err:
-            print(f"⚠️ 旧版仪表板重定向写入失败: {legacy_err}")
+        except Exception:
+            pass
             
-        print(f"✅ 轻量级仪表板已保存: {dashboard_path}")
-        print(f"ℹ️ 兼容性提示: 已更新 {legacy_dashboard_path.name} 为重定向文件")
+        print(f"<i class='fas fa-check-circle text-green-500'></i> 轻量级仪表板已保存: {dashboard_path}")
         return dashboard_path
         
     def run_analysis(self):
@@ -9001,9 +9060,9 @@ class LightweightAnalysis:
             print(f"[TIME] {label}: {_dt:.2f}s")
             return res
 
-        print("🚀 启动轻量级量化分析")
+        print("<i class='fas fa-rocket text-blue-500'></i> 启动轻量级量化分析")
         print("=" * 60)
-        print("🎯 目标: 快速加载 + 核心洞察")
+        print("<i class='fas fa-bullseye text-red-500'></i> 目标: 快速加载 + 核心洞察")
         print("=" * 60)
         
         try:
@@ -9024,16 +9083,16 @@ class LightweightAnalysis:
             dashboard_path = _timeit("创建仪表板", self.create_lightweight_dashboard)
             
             print("\n" + "=" * 60)
-            print("✅ 轻量级分析完成!")
-            print(f"📊 生成 {len(self.figures)} 个轻量级图表")
-            print(f"🎛️ 仪表板: {dashboard_path}")
-            print(f"⚡ 预计加载时间: < 5秒")
+            print("<i class='fas fa-check-circle text-green-500'></i> 轻量级分析完成!")
+            print(f"<i class='fas fa-chart-bar text-indigo-500'></i> 生成 {len(self.figures)} 个轻量级图表")
+            print(f"<i class='fas fa-sliders-h text-gray-600'></i> 仪表板: {dashboard_path}")
+            print(f"<i class='fas fa-bolt text-yellow-400'></i> 预计加载时间: < 5秒")
             print("=" * 60)
             
             return dashboard_path
             
         except Exception as e:
-            print(f"❌ 分析失败: {e}")
+            print(f"<i class='fas fa-times-circle text-red-500'></i> 分析失败: {e}")
             import traceback
             traceback.print_exc()
             return None
@@ -9045,7 +9104,7 @@ class LightweightAnalysis:
         - 日PnL：NAV_t - NAV_(t-1)
         - 日收益率：PnL_t / 本金（非复利）；同时展示累积收益率=∑日收益率。
         """
-        print("\n📈 === 日收益率曲线（首日总资产为本金） ===")
+        print("\n<i class='fas fa-chart-line text-green-500'></i> === 日收益率曲线（首日总资产为本金） ===")
         from pathlib import Path as _Path
         import plotly.graph_objs as go
         import numpy as _np
@@ -9053,7 +9112,7 @@ class LightweightAnalysis:
 
         mtm_file = _Path("mtm_analysis_results/daily_nav_revised.csv")
         if not mtm_file.exists():
-            print("⚠️ 未找到盯市分析结果文件，跳过基于本金的日收益率曲线")
+            print("<i class='fas fa-exclamation-triangle text-yellow-500'></i> 未找到盯市分析结果文件，跳过基于本金的日收益率曲线")
             return
 
         def _parse_currency(v):
@@ -9080,7 +9139,7 @@ class LightweightAnalysis:
             
             # 从订单数据计算每日现金流并重新计算现金和NAV
             if not hasattr(self, 'df') or self.df is None:
-                print("⚠️ 订单数据未加载，无法重新计算NAV")
+                print("<i class='fas fa-exclamation-triangle text-yellow-500'></i> 订单数据未加载，无法重新计算NAV")
                 df['total_assets_num'] = df['total_assets'].apply(_parse_currency)
             else:
                 # 计算每日现金流
@@ -9108,7 +9167,7 @@ class LightweightAnalysis:
                 # NAV = 现金 + 多头 - 空头
                 df['total_assets_num'] = df['cash_num'] + df['long_value_num'] - df['short_value_num']
                 
-                print(f"✅ 已基于正确初始资金重新计算NAV")
+                print(f"<i class='fas fa-check-circle text-green-500'></i> 已基于正确初始资金重新计算NAV")
             # 基于“授信规则”重估初始本金（首日资金占用峰值 × 安全系数），若无法重估则回退
             self._ensure_credit_rules_loaded()
             init_capital_factor = float(self._credit_rules.get('initial_capital_factor', 1.3))
@@ -9269,130 +9328,197 @@ class LightweightAnalysis:
             
             # 确保NAV数据可用
             if len(df) == 0 or df['total_assets_num'].isna().all():
-                print("⚠️ 盯市数据为空或NAV全部缺失，跳过")
+                print("<i class='fas fa-exclamation-triangle text-yellow-500'></i> 盯市数据为空或NAV全部缺失，跳过")
                 return
             # 日PnL 与 日收益率
             df['daily_pnl'] = df['total_assets_num'].diff()
             df['daily_return_capital'] = df['daily_pnl'] / initial_capital
             df['cum_return_capital'] = df['daily_return_capital'].cumsum()
+            df['nav_capital_curve'] = 1 + df['cum_return_capital']
 
             # 真实净值日收益率（复利）
             df['daily_return_nav'] = df['total_assets_num'].pct_change()
             df.loc[df.index[0], 'daily_return_nav'] = 0.0  # 首日设为0
             df['cum_return_nav'] = (1 + df['daily_return_nav']).cumprod() - 1
+            df['nav_curve'] = 1 + df['cum_return_nav']
 
             # 确保日期格式正确，转换为字符串再转为datetime以避免Plotly将date对象转为时间戳数字
             date_index = _pd.to_datetime(df['date'].astype(str))
 
-            # 图表：主轴=日收益率，副轴=累积收益率
-            fig = go.Figure()
-            fig.add_trace(go.Scatter(
+            # 基准对齐（按策略交易日对齐，默认展示深证成指）
+            bench_curves = []
+            bench_daily_series = []
+            primary_benchmark = None
+            if self.benchmark_data:
+                for bench_name, bench_df in self.benchmark_data.items():
+                    bench_copy = bench_df.copy()
+                    bench_copy['date'] = _pd.to_datetime(bench_copy['date'])
+                    merged_bench = _pd.DataFrame({'date': date_index}).merge(
+                        bench_copy[['date', 'daily_return', 'cumulative_return']],
+                        on='date', how='left'
+                    ).sort_values('date')
+                    if merged_bench['cumulative_return'].notna().sum() == 0:
+                        continue
+                    bench_nav_curve = 1 + merged_bench['cumulative_return'].astype(float)
+                    bench_curves.append((bench_name, merged_bench['date'], bench_nav_curve))
+                    bench_daily_series.append((bench_name, merged_bench['date'], merged_bench['daily_return'].astype(float)))
+                    if primary_benchmark is None or bench_name == '深证成指':
+                        primary_benchmark = bench_name
+
+            # 主图：净值曲线（首日=1），保持单轴便于在仪表板预览
+            fig_nav = go.Figure()
+            fig_nav.add_trace(go.Scatter(
                 x=date_index,
-                y=df['daily_return_capital'],
+                y=df['nav_curve'],
                 mode='lines',
-                name='日收益率(以本金计)',
-                line=dict(color='#3498db', width=2)
+                name='真实净值曲线',
+                line=dict(color='#16a085', width=2.3)
             ))
-            fig.add_trace(go.Scatter(
+            fig_nav.add_trace(go.Scatter(
+                x=date_index,
+                y=df['nav_capital_curve'],
+                mode='lines',
+                name='固定本金累积曲线',
+                line=dict(color='#3498db', width=1.9, dash='dot')
+            ))
+
+            bench_colors = ['#27ae60', '#f1c40f', '#9b59b6', '#16a085', '#e67e22', '#34495e']
+            for idx, (bench_name, bench_dates, bench_nav_curve) in enumerate(bench_curves):
+                fig_nav.add_trace(go.Scatter(
+                    x=bench_dates,
+                    y=bench_nav_curve,
+                    mode='lines',
+                    name=f'{bench_name}净值',
+                    line=dict(color=bench_colors[idx % len(bench_colors)], width=1.7, dash='dot'),
+                    hovertemplate=f'日期: %{{x}}<br>{bench_name}: %{{y:.2f}}<extra></extra>',
+                    visible=True if bench_name == (primary_benchmark or bench_name) else 'legendonly'
+                ))
+
+            fig_nav.update_layout(
+                height=520,
+                title='净值曲线对比（首日=1，固定本金 vs 真实净值 vs 基准）',
+                xaxis=dict(title='日期'),
+                yaxis=dict(title='净值（首日=1）', tickformat='.2f'),
+                hovermode='x unified',
+                legend=dict(orientation='h', yanchor='bottom', y=1.02, xanchor='right', x=1)
+            )
+
+            # 副图：日收益率对比（策略两种口径 + 基准）
+            fig_daily = go.Figure()
+            fig_daily.add_trace(go.Scatter(
                 x=date_index,
                 y=df['daily_return_nav'],
                 mode='lines',
                 name='真实净值日收益率',
-                line=dict(color='#16a085', width=2, dash='dot')
+                line=dict(color='#16a085', width=1.8)
             ))
-            fig.add_trace(go.Scatter(
+            fig_daily.add_trace(go.Scatter(
                 x=date_index,
-                y=df['cum_return_capital'],
+                y=df['daily_return_capital'],
                 mode='lines',
-                name='累积收益率(以本金计)',
-                line=dict(color='#e74c3c', width=2),
-                yaxis='y2'
+                name='日收益率(固定本金)',
+                line=dict(color='#3498db', width=1.4, dash='dot')
             ))
-            fig.add_trace(go.Scatter(
-                x=date_index,
-                y=df['cum_return_nav'],
-                mode='lines',
-                name='真实净值累积收益率',
-                line=dict(color='#e67e22', width=2, dash='dot'),
-                yaxis='y2'
-            ))
-
-            if self.benchmark_data:
-                bench_colors = ['#27ae60', '#f1c40f', '#9b59b6', '#16a085', '#e67e22', '#34495e']
-                date_filter = set(df['date'])
-                for idx, (bench_name, bench_df) in enumerate(self.benchmark_data.items()):
-                    bench_aligned = bench_df[bench_df['date'].isin(date_filter)].copy()
-                    if bench_aligned.empty:
-                        continue
-                    bench_aligned = bench_aligned.dropna(subset=['cumulative_return']).sort_values('date')
-                    if bench_aligned.empty:
-                        continue
-                    x_bench = _pd.to_datetime(bench_aligned['date'])
-                    y_bench = bench_aligned['cumulative_return'].astype(float)
-                    visibility = True if bench_name == '深证成指' else 'legendonly'
-                    fig.add_trace(go.Scatter(
-                        x=x_bench,
-                        y=y_bench,
-                        mode='lines',
-                        name=f'{bench_name}累积收益',
-                        line=dict(color=bench_colors[idx % len(bench_colors)], width=2, dash='dot'),
-                        hovertemplate=f'日期: %{{x}}<br>{bench_name}: %{{y:.2%}}<extra></extra>',
-                        yaxis='y2',
-                        visible=visibility
-                    ))
-
-            fig.update_layout(
-                height=520,
+            for idx, (bench_name, bench_dates, bench_daily) in enumerate(bench_daily_series):
+                fig_daily.add_trace(go.Scatter(
+                    x=bench_dates,
+                    y=bench_daily,
+                    mode='lines',
+                    name=f'{bench_name}日收益率',
+                    line=dict(color=bench_colors[idx % len(bench_colors)], width=1.1),
+                    hovertemplate=f'日期: %{{x}}<br>{bench_name}: %{{y:.2%}}<extra></extra>',
+                    visible=True if bench_name == (primary_benchmark or bench_name) else 'legendonly'
+                ))
+            if len(date_index) > 0:
+                fig_daily.add_shape(
+                    type='line',
+                    x0=date_index.min(),
+                    x1=date_index.max(),
+                    y0=0,
+                    y1=0,
+                    line=dict(color='rgba(0,0,0,0.2)', width=1)
+                )
+            fig_daily.update_layout(
+                height=400,
+                title='日收益率对比（策略 vs 基准）',
                 xaxis=dict(title='日期'),
                 yaxis=dict(title='日收益率', tickformat='.2%'),
-                yaxis2=dict(title='累积收益率', overlaying='y', side='right', tickformat='.2%'),
+                hovermode='x unified',
                 legend=dict(orientation='h', yanchor='bottom', y=1.02, xanchor='right', x=1)
             )
 
             title = '日收益率曲线（以首日总资产为本金 vs 真实净值）'
             explanation_html = (
-                "<h4>计算过程说明</h4>"
-                "<ol>"
-                "<li><b>本金</b>：按《授信规则》重估——先回放首日逐笔得到当日最低所需本金，再乘以安全系数（默认1.3）。"
-                "若重估失败，则回退为正确的初始资金62,090,808元。</li>"
-                "<li><b>盯市盈亏</b>：当日总资产 - 前一日总资产（来源于盯市文件的总资产差分）。</li>"
-                "<li><b>日收益率（以本金计）</b>：$r_t = \\frac{\\text{当日盈亏}_t}{\\text{初始本金}}$（以固定本金标准化，非复利）。</li>"
-                "<li><b>真实净值日收益率</b>：$r^{\\text{净值}}_t = \\frac{\\text{总资产}_t - \\text{总资产}_{t-1}}{\\text{总资产}_{t-1}}$（基于前一日总资产，复利）。</li>"
-                "<li><b>累积收益率（以本金计）</b>：$R_t = \\sum_{i\\le t} r_i$（按固定本金累计，非复利）。</li>"
-                "<li><b>真实净值累积收益率</b>：$R^{\\text{净值}}_t = \\prod_{i\\le t}(1 + r^{\\text{净值}}_i) - 1$（复利累积，真实净值增长率）。</li>"
-                "<li><b>基准对照</b>：同步绘制各基准指数的累积收益率（默认展示深证成指，其余可通过图例手动开启）。</li>"
-                "</ol>"
-                "<h4>两种收益率的区别</h4>"
+                "<h4>展示结构</h4>"
                 "<ul>"
-                "<li><b>固定本金口径</b>：将每日盈亏除以固定的初始本金，便于理解相对初始投资规模的收益；不考虑复利效应。</li>"
-                "<li><b>真实净值口径</b>：将每日盈亏除以前一日的总资产，反映资产的真实增长率；符合复利计算，更接近实际投资体验。</li>"
-                "<li><b>应用场景</b>：固定本金口径适合评估资金使用效率；真实净值口径适合评估投资组合实际表现和计算夏普比率等风险调整指标。</li>"
+                "<li><b>主图</b>：将固定本金累积曲线、真实净值曲线与基准指数净值（均以首日=1）放在同一坐标系，无需双轴，便于在仪表板预览。</li>"
+                "<li><b>副图</b>：单独展示日收益率，对齐基准指数日收益，突出波动与相对表现；零轴用虚线标记。</li>"
                 "</ul>"
-                "<p>说明：两种口径各有用途，固定本金便于与初始资金规模直接对应；真实净值更符合会计准则和基金净值计算标准。" 
-                "图表中同时展示两种口径，便于对比分析。</p>"
+                "<h4>计算口径</h4>"
+                "<ol>"
+                "<li><b>本金</b>：按《授信规则》重估——先回放首日逐笔得到当日最低所需本金，再乘以安全系数（默认1.3）；若失败则回退为正确初始资金62,090,808元。</li>"
+                "<li><b>日收益率（固定本金）</b>：$r^{\\text{本金}}_t = \\frac{\\text{当日盈亏}_t}{\\text{初始本金}}$，非复利。</li>"
+                "<li><b>日收益率（真实净值）</b>：$r^{\\text{净值}}_t = \\frac{\\text{总资产}_t - \\text{总资产}_{t-1}}{\\text{总资产}_{t-1}}$，复利口径，首日设为0。</li>"
+                "<li><b>净值曲线</b>：固定本金曲线= $1+\\sum r^{\\text{本金}}_t$；真实净值曲线= $\\prod(1+r^{\\text{净值}}_t)$；基准净值曲线= $\\prod(1+r^{\\text{指数}}_t)$。</li>"
+                "<li><b>基准对齐</b>：按策略交易日对齐基准指数，默认显示深证成指，其他基准可在图例中切换。</li>"
+                "</ol>"
+                "<p>图表拆分后，累积表现与日度波动分开展示：主图聚焦长期净值对比，副图专注单日波动与相对强弱，避免混用日收益与累积收益导致的双轴混乱。</p>"
             )
+
+            nav_total_return = (df['nav_curve'].iloc[-1] - 1) if len(df) > 0 else 0.0
+            capital_total_return = (df['nav_capital_curve'].iloc[-1] - 1) if len(df) > 0 else 0.0
+            nav_vol = _np.nanstd(df['daily_return_nav'], ddof=1)
+            sharpe_nav = (_np.nanmean(df['daily_return_nav']) / nav_vol * _np.sqrt(252)) if nav_vol > 0 else _np.nan
+            dd_nav = ((1 + df['daily_return_nav']).cumprod().div((1 + df['daily_return_nav']).cumprod().expanding().max()) - 1).min()
+
+            primary_bench_return = None
+            primary_excess = None
+            if primary_benchmark:
+                bench_df_primary = self.benchmark_data.get(primary_benchmark)
+                if bench_df_primary is not None and len(bench_df_primary) > 0:
+                    bench_df_primary = bench_df_primary.copy()
+                    bench_df_primary['date'] = _pd.to_datetime(bench_df_primary['date'])
+                    bench_aligned = bench_df_primary[bench_df_primary['date'].isin(date_index)]
+                    if len(bench_aligned) > 0:
+                        primary_bench_return = float(bench_aligned['cumulative_return'].iloc[-1])
+                        primary_excess = nav_total_return - primary_bench_return
 
             metrics = {
                 '本金(按授信规则重估)': f"¥{initial_capital:,.0f}",
+                '期末真实净值收益率': f"{nav_total_return*100:.2f}%",
+                '期末固定本金收益率': f"{capital_total_return*100:.2f}%",
+                '真实净值夏普(年化)': f"{sharpe_nav:.3f}" if not _np.isnan(sharpe_nav) else "N/A",
+                '真实净值最大回撤': f"{dd_nav:.2%}",
                 '日收益率均值(本金计)': f"{_np.nanmean(df['daily_return_capital'])*100:.3f}%",
-                '日收益率标准差(本金计)': f"{_np.nanstd(df['daily_return_capital'])*100:.3f}%",
-                '累积收益率(本金计,期末)': f"{(df['cum_return_capital'].iloc[-1] if len(df)>0 else 0)*100:.2f}%",
-                '真实净值日收益率均值': f"{_np.nanmean(df['daily_return_nav'])*100:.3f}%",
-                '真实净值日收益率标准差': f"{_np.nanstd(df['daily_return_nav'])*100:.3f}%",
-                '真实净值累积收益率(期末)': f"{(df['cum_return_nav'].iloc[-1] if len(df)>0 else 0)*100:.2f}%",
-                '夏普比率(年化,真实净值)': f"{(_np.nanmean(df['daily_return_nav']) / _np.nanstd(df['daily_return_nav']) * _np.sqrt(252)) if _np.nanstd(df['daily_return_nav']) > 0 else 0:.3f}",
+                '日收益率标准差(本金计)': f"{_np.nanstd(df['daily_return_capital'], ddof=1)*100:.3f}%",
+                '日收益率均值(真实净值)': f"{_np.nanmean(df['daily_return_nav'])*100:.3f}%",
+                '日收益率标准差(真实净值)': f"{nav_vol*100:.3f}%"
             }
+            if primary_bench_return is not None:
+                metrics[f'{primary_benchmark}收益率'] = f"{primary_bench_return*100:.2f}%"
+                metrics[f'vs {primary_benchmark}超额(真实净值)'] = f"{primary_excess*100:+.2f}%"
+            
+            # Cache metrics for dashboard
+            if not hasattr(self, 'strategy_metrics'):
+                self.strategy_metrics = {}
+            self.strategy_metrics.update({
+                'total_return_nav': f"{nav_total_return*100:.2f}%",
+                'sharpe_ratio': metrics.get('真实净值夏普(年化)', '0.00'),
+                'win_rate': f"{(df['daily_return_nav'] > 0).mean():.2%}",
+                'max_drawdown': f"{dd_nav:.2%}"
+            })
 
             self._save_figure_with_details(
-                fig,
+                fig_nav,
                 name='daily_returns_initial_capital_light',
                 title=title,
                 explanation_html=explanation_html,
-                metrics=metrics
+                metrics=metrics,
+                extra_figs=[('daily_returns_panel', fig_daily)]
             )
             print("[OK] 基于本金的日收益率曲线已生成")
         except Exception as e:
-            print(f"❌ 生成基于本金的日收益率曲线失败: {e}")
+            print(f"<i class='fas fa-times-circle text-red-500'></i> 生成基于本金的日收益率曲线失败: {e}")
 
     def daily_min_capital_and_utilization_analysis(self):
         """全周期：每日最低所需本金序列 + 资金占用收益率。
@@ -9421,7 +9547,7 @@ class LightweightAnalysis:
                 base_cols = [c for c in need_cols if c in pd.read_parquet(self.data_path).columns]
                 od = pd.read_parquet(self.data_path, columns=base_cols)
                 if len(od) == 0:
-                    print('⚠️ 订单数据为空，跳过资金占用分析')
+                    print("<i class='fas fa-exclamation-triangle text-yellow-500'></i> 订单数据为空，跳过资金占用分析")
                     return None
                 tcol = 'tradeTimestamp' if 'tradeTimestamp' in od.columns else 'Timestamp'
                 od = od.dropna(subset=['Code','direction','tradeQty','tradeAmount','fee',tcol]).copy()
@@ -9544,7 +9670,7 @@ class LightweightAnalysis:
                 daily_min = _compute_daily_min()
 
             if daily_min is None or len(daily_min) == 0:
-                print('⚠️ 无法构建每日最低所需本金序列，终止资金占用分析')
+                print("<i class='fas fa-exclamation-triangle text-yellow-500'></i> 无法构建每日最低所需本金序列，终止资金占用分析")
                 return
 
             daily_min = daily_min.copy()
@@ -9552,7 +9678,7 @@ class LightweightAnalysis:
 
             mtm_file = Path('mtm_analysis_results/daily_nav_revised.csv')
             if not mtm_file.exists():
-                print('⚠️ 未找到盯市数据，跳过资金占用收益率')
+                print("<i class='fas fa-exclamation-triangle text-yellow-500'></i> 未找到盯市数据，跳过资金占用收益率")
                 return
 
             def _parse_cur(v):
@@ -9597,10 +9723,10 @@ class LightweightAnalysis:
                 
                 nav['cash_num'] = cash_series
                 nav['total_assets_num'] = nav['cash_num'] + nav['long_value_num'] - nav['short_value_num']
-                print(f'   ✅ NAV已重新计算，范围: ¥{nav["total_assets_num"].min():,.0f} ~ ¥{nav["total_assets_num"].max():,.0f}')
+                print(f"   <i class='fas fa-check-circle text-green-500'></i> NAV已重新计算，范围: ¥{nav['total_assets_num'].min():,.0f} ~ ¥{nav['total_assets_num'].max():,.0f}")
             else:
                 # 回退：使用文件中的数据
-                print('   ⚠️ 无订单数据，使用文件中的NAV数据（可能不准确）')
+                print("   <i class='fas fa-exclamation-triangle text-yellow-500'></i> 无订单数据，使用文件中的NAV数据（可能不准确）")
                 nav['total_assets_num'] = nav['total_assets'].apply(_parse_cur)
             
             nav['daily_pnl'] = nav['total_assets_num'].diff()
@@ -9614,7 +9740,7 @@ class LightweightAnalysis:
                     print(f"[CACHE] 缓存缺失 {len(missing_dates)} 个盯市日期，重新计算每日最低所需本金")
                     daily_min = _compute_daily_min()
                     if daily_min is None or len(daily_min) == 0:
-                        print('⚠️ 重新计算每日最低所需本金失败，终止资金占用分析')
+                        print("<i class='fas fa-exclamation-triangle text-yellow-500'></i> 重新计算每日最低所需本金失败，终止资金占用分析")
                         return
                     daily_min = daily_min.copy()
                     daily_min['date'] = _pd.to_datetime(daily_min['date']).dt.date
@@ -9643,15 +9769,15 @@ class LightweightAnalysis:
             mask = ~_np.isnan(y_cum)
             if mask.sum() > 2:
                 slope, intercept, r_value, _, _ = _linregress(x_idx[mask], y_cum[mask])
-                print(f'   ⚠️ 累计收益率线性拟合 R² = {r_value**2:.6f}')
+                print(f"   <i class='fas fa-exclamation-triangle text-yellow-500'></i> 累计收益率线性拟合 R² = {r_value**2:.6f}")
                 if r_value**2 > 0.99:
-                    print(f'   ⚠️ 警告：累计收益率过于线性（R²>{r_value**2:.4f}），可能存在数据问题！')
+                    print(f"   <i class='fas fa-exclamation-triangle text-yellow-500'></i> 警告：累计收益率过于线性（R²>{r_value**2:.4f}），可能存在数据问题！")
                     # 检查是否PnL与资金占用高度相关
                     corr = _np.corrcoef(merged['daily_pnl'].dropna(), 
                                        merged['min_required_equity'].reindex(merged['daily_pnl'].dropna().index))[0,1]
                     print(f'   PnL与资金占用的相关系数: {corr:.4f}')
                     if abs(corr) > 0.7:
-                        print(f'   ⚠️ PnL与资金占用高度相关！这会导致收益率过于稳定')
+                        print(f"   <i class='fas fa-exclamation-triangle text-yellow-500'></i> PnL与资金占用高度相关！这会导致收益率过于稳定")
 
             # 3) 图表 - 改进显示，突出日度波动
             dates_iso = _pd.to_datetime(merged['date']).dt.strftime('%Y-%m-%d').tolist()
@@ -9820,7 +9946,7 @@ class LightweightAnalysis:
             )
             print('[OK] 每日最低所需本金 + 资金占用收益率 已生成')
         except Exception as e:
-            print(f'❌ 资金占用分析失败: {e}')
+            print(f"<i class='fas fa-times-circle text-red-500'></i> 资金占用分析失败: {e}")
 
     def _save_figure_pair_with_details(self, fig_top, fig_bottom, name: str, title: str, explanation_html: str, metrics_primary: dict, metrics_secondary: dict, primary_title: str, secondary_title: str):
         """在同一页面上下展示两张图：上=交易金额占比，下=盈利金额占比。
@@ -9930,6 +10056,8 @@ class LightweightAnalysis:
                 <meta name=\"viewport\" content=\"width=device-width, initial-scale=1\" />
                 <title>{title}</title>
                 <script src=\"https://cdn.plot.ly/plotly-latest.min.js\"></script>
+                <link rel=\"stylesheet\" href=\"https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css\">
+                <script src=\"https://cdn.tailwindcss.com\"></script>
                 <style>
                     body {{ font-family: Arial, sans-serif; margin: 20px; }}
                     h1 {{ margin: 0 0 15px 0; font-size: 22px; }}
@@ -9981,9 +10109,9 @@ class LightweightAnalysis:
             output_path.write_text(html, encoding='utf-8')
             self.figures.append((name, str(output_path)))
             file_size = output_path.stat().st_size / (1024*1024)
-            print(f"    ✅ 保存: {name}.html ({file_size:.2f} MB)")
+            print(f"    <i class='fas fa-check-circle text-green-500'></i> 保存: {name}.html ({file_size:.2f} MB)")
         except Exception as e:
-            print(f"    ❌ 保存失败 {name}: {e}")
+            print(f"    <i class='fas fa-times-circle text-red-500'></i> 保存失败 {name}: {e}")
 
     # ====== 因子归因：数据与回归辅助 ======
     def _load_factor_strategy_dataset(self) -> Optional[pd.DataFrame]:
@@ -10139,7 +10267,7 @@ class LightweightAnalysis:
         return pd.DataFrame(rows)
 
     def portfolio_factor_attribution_main(self) -> None:
-        print("\n📈 === 因子归因（FF3）主页面 ===")
+        print("\n<i class='fas fa-chart-line text-green-500'></i> === 因子归因（FF3）主页面 ===")
         try:
             d = self._load_factor_strategy_dataset()
             if d is None or d.empty:
@@ -10302,19 +10430,19 @@ class LightweightAnalysis:
             }
 
             explanation = [
-                '<h4>📌 方法说明</h4>',
-                '<ul>',
-                '<li><b>模型：</b>R<sub>strategy</sub> - R<sub>f</sub> = α + β<sub>MKT</sub>·MKT + β<sub>SMB</sub>·SMB + β<sub>HML</sub>·HML + ε</li>',
-                '<li><b>因子构建：</b>MKT=深证成指日收益，SMB/HML=深交所2×3双重排序（月度重构）</li>',
-                '<li><b>滚动窗口：</b>30天，每日更新回归系数</li>',
-                '<li><b>数据源：</b>深交所2,875只股票，Baostock历史PB + AkShare市值</li>',
-                '</ul>',
-                '<h4>📊 如何阅读图表</h4>',
-                '<ul>',
-                '<li><b>上图（双Y轴）：</b>左侧=Beta系数，右侧=Alpha（橙色虚线）</li>',
-                '<li><b>下图：</b>三个因子的日度收益率（理解市场环境）</li>',
-                '<li><b>例：</b>β_HML=-0.5，HML=-3%（成长股涨） → 贡献=+1.5%（负×负=正）</li>',
-                '</ul>'
+                "<h4><i class='fas fa-thumbtack text-red-400'></i> 方法说明</h4>",
+                "<ul>",
+                "<li><b>模型：</b>R<sub>strategy</sub> - R<sub>f</sub> = α + β<sub>MKT</sub>·MKT + β<sub>SMB</sub>·SMB + β<sub>HML</sub>·HML + ε</li>",
+                "<li><b>因子构建：</b>MKT=深证成指日收益，SMB/HML=深交所2×3双重排序（月度重构）</li>",
+                "<li><b>滚动窗口：</b>30天，每日更新回归系数</li>",
+                "<li><b>数据源：</b>深交所2,875只股票，Baostock历史PB + AkShare市值</li>",
+                "</ul>",
+                "<h4><i class='fas fa-chart-bar text-indigo-500'></i> 如何阅读图表</h4>",
+                "<ul>",
+                "<li><b>上图（双Y轴）：</b>左侧=Beta系数，右侧=Alpha（橙色虚线）</li>",
+                "<li><b>下图：</b>三个因子的日度收益率（理解市场环境）</li>",
+                "<li><b>例：</b>β_HML=-0.5，HML=-3%（成长股涨） → 贡献=+1.5%（负×负=正）</li>",
+                "</ul>"
             ]
             # 添加第三个图表：R²曲线
             fig_r2 = go.Figure()
@@ -10355,15 +10483,15 @@ class LightweightAnalysis:
                 title2='FF3因子日度收益率（市场环境）',
                 title3='滚动模型解释力（R²）'
             )
-            print("✅ 因子归因主页面完成")
+            print("<i class='fas fa-check-circle text-green-500'></i> 因子归因主页面完成")
         except Exception as e:
-            print(f"❌ 因子归因失败: {e}")
+            print(f"<i class='fas fa-times-circle text-red-500'></i> 因子归因失败: {e}")
             import traceback
             traceback.print_exc()
     
     def portfolio_factor_attribution_quarterly(self) -> None:
         """按季度分析FF3因子归因"""
-        print("\n📈 === 因子归因（FF3）按季度分析 ===")
+        print("\n<i class='fas fa-chart-line text-green-500'></i> === 因子归因（FF3）按季度分析 ===")
         try:
             d = self._load_factor_strategy_dataset()
             if d is None or d.empty:
@@ -10472,23 +10600,23 @@ class LightweightAnalysis:
             }
             
             explanation = [
-                '<h4>📌 季度归因分析说明</h4>',
-                '<ul>',
-                '<li><b>方法：</b>使用Fama-French三因子模型对策略收益进行归因分析</li>',
-                '<li><b>模型：</b>R<sub>strategy</sub> - R<sub>f</sub> = α + β<sub>MKT</sub>·MKT + β<sub>SMB</sub>·SMB + β<sub>HML</sub>·HML + ε</li>',
-                '<li><b>深交所因子：</b>使用2×3双重排序方法构建，基于深交所全部上市公司</li>',
-                '<li><b>分组规则：</b>市值按中位数分S/B，BM按30%/70%分L/M/H，形成6个组合</li>',
-                '<li><b>加权方式：</b>组合内按流通市值加权</li>',
-                '<li><b>⚠️ 数据限制：</b>市值数据使用当前值，存在前视偏差，结果仅供风格分析参考</li>',
-                '</ul>',
-                '<h4>📊 指标解读</h4>',
-                '<ul>',
-                '<li><b>Alpha：</b>扣除系统性风险后的超额收益，衡量选股/择时能力</li>',
-                '<li><b>β_MKT：</b>对市场整体波动的敏感度（>1表示高波动）</li>',
-                '<li><b>β_SMB：</b>对小市值风格的暴露（>0偏好小盘，<0偏好大盘）</li>',
-                '<li><b>β_HML：</b>对价值风格的暴露（>0偏好价值，<0偏好成长）</li>',
-                '<li><b>R²：</b>因子对策略收益的解释力（越高说明风格越纯粹）</li>',
-                '</ul>'
+                "<h4><i class='fas fa-thumbtack text-red-400'></i> 季度归因分析说明</h4>",
+                "<ul>",
+                "<li><b>方法：</b>使用Fama-French三因子模型对策略收益进行归因分析</li>",
+                "<li><b>模型：</b>R<sub>strategy</sub> - R<sub>f</sub> = α + β<sub>MKT</sub>·MKT + β<sub>SMB</sub>·SMB + β<sub>HML</sub>·HML + ε</li>",
+                "<li><b>深交所因子：</b>使用2×3双重排序方法构建，基于深交所全部上市公司</li>",
+                "<li><b>分组规则：</b>市值按中位数分S/B，BM按30%/70%分L/M/H，形成6个组合</li>",
+                "<li><b>加权方式：</b>组合内按流通市值加权</li>",
+                "<li><b><i class='fas fa-exclamation-triangle text-yellow-500'></i> 数据限制：</b>市值数据使用当前值，存在前视偏差，结果仅供风格分析参考</li>",
+                "</ul>",
+                "<h4><i class='fas fa-chart-bar text-indigo-500'></i> 指标解读</h4>",
+                "<ul>",
+                "<li><b>Alpha：</b>扣除系统性风险后的超额收益，衡量选股/择时能力</li>",
+                "<li><b>β_MKT：</b>对市场整体波动的敏感度（>1表示高波动）</li>",
+                "<li><b>β_SMB：</b>对小市值风格的暴露（>0偏好小盘，<0偏好大盘）</li>",
+                "<li><b>β_HML：</b>对价值风格的暴露（>0偏好价值，<0偏好成长）</li>",
+                "<li><b>R²：</b>因子对策略收益的解释力（越高说明风格越纯粹）</li>",
+                "</ul>"
             ]
             
             self._save_figure_pair_with_details_v2(
@@ -10501,10 +10629,10 @@ class LightweightAnalysis:
                 primary_title='各季度Beta系数',
                 secondary_title='各季度Alpha与R²'
             )
-            print("✅ 因子归因季度分析完成")
+            print("<i class='fas fa-check-circle text-green-500'></i> 因子归因季度分析完成")
             
         except Exception as e:
-            print(f"❌ 因子归因季度分析失败: {e}")
+            print(f"<i class='fas fa-times-circle text-red-500'></i> 因子归因季度分析失败: {e}")
             import traceback
             traceback.print_exc()
 

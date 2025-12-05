@@ -23,6 +23,24 @@
 
 ## 安全与配置提示
 数据集中包含交易明细，请遵守内部数据脱敏规范，避免将真实账户信息写入日志。外部接口调用需在离线环境完成，严禁在脚本中硬编码凭证。若需新增配置项，请通过环境变量或本地 `.env` 方案，并在 README 中补充维护说明。
+- Tushare 凭证已存放在 `.env.tushare`：同时包含 `TUSHARE_TOKEN` 和 `TUSHARE_PRO_TOKEN`，使用时优先读取 `TUSHARE_PRO_TOKEN`，回退再用 `TUSHARE_TOKEN`；注意避免将文件纳入版本控制。
+
+## 页面文档与变更记录要求
+- 每个页面必须有一篇文档记录其目的、实现原理/计算方式、修改历史及遗留问题，便于长期维护快速定位核心信息。更新页面前，先在 `documents/` 搜索对应文档；无则创建并在此处登记映射。
+- 当前映射（需保持同步，可交叉引用）：
+  - 分时/时段表现：`time_slot_*` → `documents/各页面指导文档/时间分段表现页面.md`
+  - 成交质量/滑点/成本：`fill_rate_distribution_light.html`，`fill_rate_timeseries_light.html`，`price_slippage_light.html`，`time_slippage_light.html`，`total_cost_light.html`，`slot_intraday_profit_waterfall_light.html` → `documents/各页面指导文档/成交质量与滑点页面.md`
+  - 组合与资金占用/分布：`capital_utilization_light.html`，`portfolio_composition_light.html`，`intraday_avg_holding_time_light.html`，`amount_by_board_pie_light.html`，`amount_by_industry_pie_light.html`，`amount_by_market_cap_pie_light.html` → `documents/各页面指导文档/组合与资金占用页面.md`
+  - 收益分布与绝对盈亏：`returns_distribution_light.html`，`daily_absolute_profit_light.html` → `documents/各页面指导文档/收益分布与绝对盈亏页面.md`
+  - 日收益率对比：`daily_returns_comparison_light.html` → `documents/各页面指导文档/日收益率对比页面.md`
+  - 固定本金与净值：`daily_returns_initial_capital_light.html` → `documents/各页面指导文档/日收益率曲线（以首日总资产为本金 vs 真实净值）.md`
+  - 择时能力：`entry_exit_rank_baostock_full.html` → `documents/各页面指导文档/策略择时能力.md`
+  - 因子归因：`factor_attribution_main.html`，`factor_attribution_quarterly.html` → `documents/各页面指导文档/因子归因.md`（相关：`量化策略因子归因分析：操作逻辑与数学步骤.md`）
+  - 因子暴露：`factor_exposure_light.html`，`factor_direction_exposure_light.html`，`factor_holdings_exposure_light.html` → `documents/各页面指导文档/因子暴露分析inf和nan处理记录.md`（相关：`暴露度计算与呈现方式评估.md`）
+  - IC 质量监控：`ic_distribution_light.html`，`ic_timeseries_light.html`，`ic_stability_regime_light.html` → `documents/各页面指导文档/IC质量监控页面.md`
+  - 预测分组/真实关系：`pred_quantile_closed_trade_light.html`，`pred_real_relationship_light.html` → `documents/各页面指导文档/pred,real,绝对盈利分组对比.md`
+  - 策略表现与基准对比：`cumulative_returns_comparison_light.html`，`strategy_vs_benchmark_light.html`，`strategy_sharpe_nav.html`，`recon_diagnosis.html` → `documents/各页面指导文档/策略表现与基准对比页面.md`（相关：`documents/各页面指导文档/累积收益对比页面修复记录.md`，`documents/各页面指导文档/高频β等权市场基准说明.md`）
+- 新页面或暂缺文档时：编写对应说明文档（含目的、算法/口径、输出路径、历史与待办），并更新本节映射。
 
 ## 外置资源
 ### 接口文档
