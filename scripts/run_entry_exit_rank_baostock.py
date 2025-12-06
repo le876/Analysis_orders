@@ -22,6 +22,7 @@ import numpy as np
 from datetime import timedelta
 from pathlib import Path
 import plotly.graph_objects as go
+import uuid
 
 T_GLOBAL = 234      # 全体交易窗口（分钟）
 T_SHORT = 5         # 超短单窗口（分钟）
@@ -37,23 +38,58 @@ RESULT_CACHE = Path('data/cache/entry_exit_rank_baostock_result.json')
 
 parser = argparse.ArgumentParser(description='计算 Entry/ExitRank (baostock 5min)')
 parser.add_argument('--recompute', action='store_true', help='忽略结果缓存，重新计算')
+parser.add_argument('--workers', type=int, default=1, help='并行 worker 数，仅缓存齐全时有效（建议 4-6）')
 args = parser.parse_args()
 use_result_cache = RESULT_CACHE.exists() and (not args.recompute)
 
 
-def summarize_hist(data, key, title, bins=30):
+def weighted_percentile(arr, weights, q):
+    arr = np.asarray(arr, dtype=float)
+    weights = np.asarray(weights, dtype=float)
+    mask = np.isfinite(arr) & np.isfinite(weights) & (weights >= 0)
+    arr = arr[mask]; weights = weights[mask]
+    if arr.size == 0 or weights.sum() == 0:
+        return np.nan
+    sorter = np.argsort(arr)
+    arr_sorted = arr[sorter]
+    w_sorted = weights[sorter]
+    cum_w = np.cumsum(w_sorted)
+    cutoff = q / 100.0 * cum_w[-1]
+    idx = np.searchsorted(cum_w, cutoff, side='left')
+    idx = min(idx, len(arr_sorted) - 1)
+    return arr_sorted[idx]
+
+
+def summarize_hist(data, key, title, bins=30, weights=None):
     arr = np.asarray(data, dtype=float)
-    arr = arr[np.isfinite(arr)]
+    mask = np.isfinite(arr)
+    if weights is not None:
+        w = np.asarray(weights, dtype=float)
+        mask = mask & np.isfinite(w) & (w >= 0)
+        w = w[mask]
+    else:
+        w = None
+    arr = arr[mask]
     if arr.size == 0:
         return None
-    counts, edges = np.histogram(arr, bins=bins, range=(0, 1))
-    stats = {
-        "size": int(arr.size),
-        "mean": float(arr.mean()),
-        "median": float(np.median(arr)),
-        "p25": float(np.percentile(arr, 25)),
-        "p75": float(np.percentile(arr, 75)),
-    }
+    counts, edges = np.histogram(arr, bins=bins, range=(0, 1), weights=w)
+    if w is None:
+        stats = {
+            "size": int(arr.size),
+            "mean": float(arr.mean()),
+            "median": float(np.median(arr)),
+            "p25": float(np.percentile(arr, 25)),
+            "p75": float(np.percentile(arr, 75)),
+        }
+    else:
+        w_sum = w.sum()
+        stats = {
+            "size": int(w_sum),
+            "mean": float((arr * w).sum() / w_sum),
+            "median": float(weighted_percentile(arr, w, 50)),
+            "p25": float(weighted_percentile(arr, w, 25)),
+            "p75": float(weighted_percentile(arr, w, 75)),
+        }
     return {
         "key": key,
         "title": title,
@@ -63,29 +99,206 @@ def summarize_hist(data, key, title, bins=30):
     }
 
 
-def fig_from_hist(hist):
+def paired_hist_fig(title, entry_hist, exit_hist, colors=None):
+    colors = colors or {"entry": "#10b981", "exit": "#f43f5e"}
+    edges = np.asarray(entry_hist["edges"], dtype=float)
+    centers = ((edges[:-1] + edges[1:]) / 2).tolist()
+    widths = (edges[1:] - edges[:-1]).tolist()
+
+    e_counts = np.asarray(entry_hist["counts"], dtype=float)
+    x_counts = np.asarray(exit_hist["counts"], dtype=float)
+    e_probs_arr = e_counts / e_counts.sum() if e_counts.sum() > 0 else e_counts
+    x_probs_arr = x_counts / x_counts.sum() if x_counts.sum() > 0 else x_counts
+    e_probs = e_probs_arr.tolist()
+    x_probs = x_probs_arr.tolist()
+
+    fig = go.Figure()
+    fig.add_bar(name="Entry", x=centers, y=e_probs, width=widths, marker_color=colors["entry"], opacity=0.78)
+    fig.add_bar(name="Exit", x=centers, y=x_probs, width=widths, marker_color=colors["exit"], opacity=0.66)
+
+    y_max = 0.0
+    for label, hist, color in [
+        ("Entry median", entry_hist.get("stats", {}), colors["entry"]),
+        ("Exit median", exit_hist.get("stats", {}), colors["exit"]),
+    ]:
+        if hist and hist.get("median") is not None:
+            fig.add_vline(
+                x=hist["median"],
+                line_dash="dot",
+                line_color=color,
+                opacity=0.55,
+            )
+    if len(e_probs) > 0:
+        y_max = max(y_max, max(e_probs))
+    if len(x_probs) > 0:
+        y_max = max(y_max, max(x_probs))
+
+    if len(widths) > 0:
+        base_level = 1 / len(widths)
+        y_max = max(y_max, base_level)
+        fig.add_trace(
+            go.Scatter(
+                x=centers,
+                y=[base_level] * len(centers),
+                mode="lines",
+                name="随机均匀基准",
+                line=dict(color="#9ca3af", width=2, dash="dot"),
+                hovertemplate="Uniform: %{y:.3f}<extra></extra>",
+            )
+        )
+
+    fig.update_layout(
+        title=title,
+        xaxis_title="Rank（0=更优）",
+        yaxis_title="比例",
+        barmode="group",
+        bargap=0.08,
+        legend=dict(
+            orientation="h",
+            yanchor="bottom",
+            y=1.04,
+            xanchor="right",
+            x=1,
+        ),
+        margin=dict(l=40, r=20, t=48, b=50),
+        height=360,
+        paper_bgcolor="rgba(0,0,0,0)",
+        plot_bgcolor="rgba(0,0,0,0)",
+        font=dict(family="Inter, Helvetica, Arial, sans-serif", color="#374151"),
+        xaxis=dict(range=[0, 1]),
+        yaxis=dict(range=[0, (y_max * 1.25) if y_max > 0 else 1], tickformat=".3f"),
+    )
+    return fig
+
+
+def single_hist_fig(title, hist, color="#2563eb"):
+    edges = np.asarray(hist["edges"], dtype=float)
+    centers = ((edges[:-1] + edges[1:]) / 2).tolist()
+    widths = (edges[1:] - edges[:-1]).tolist()
+    counts = np.asarray(hist["counts"], dtype=float)
+    probs_arr = counts / counts.sum() if counts.sum() > 0 else counts
+    probs = probs_arr.tolist()
+    y_max = probs_arr.max() if probs_arr.size else 0
+    fig = go.Figure()
+    fig.add_bar(name="Edge", x=centers, y=probs, width=widths, marker_color=color, opacity=0.78)
+    if len(widths) > 0:
+        base_level = 1 / len(widths)
+        y_max = max(y_max, base_level)
+        fig.add_trace(
+            go.Scatter(
+                x=centers,
+                y=[base_level] * len(centers),
+                mode="lines",
+                name="随机均匀基准",
+                line=dict(color="#9ca3af", width=2, dash="dot"),
+                hovertemplate="Uniform: %{y:.3f}<extra></extra>",
+            )
+        )
+    st = hist["stats"]
+    fig.update_layout(
+        title=title,
+        xaxis_title="Edge（0=未捕获波动，1=吃满区间）",
+        yaxis_title="比例",
+        bargap=0.08,
+        legend=dict(orientation="h", yanchor="bottom", y=1.04, xanchor="right", x=1),
+        margin=dict(l=40, r=20, t=48, b=50),
+        height=360,
+        paper_bgcolor="rgba(0,0,0,0)",
+        plot_bgcolor="rgba(0,0,0,0)",
+        font=dict(family="Inter, Helvetica, Arial, sans-serif", color="#374151"),
+        xaxis=dict(range=[0, 1]),
+        yaxis=dict(range=[0, (y_max * 1.25) if y_max > 0 else 1], tickformat=".3f"),
+        annotations=[
+            dict(
+                x=0.98,
+                y=0.92,
+                xref="paper",
+                yref="paper",
+                text=f"样本 {st['size']:,} | 均值 {st['mean']:.3f}",
+                showarrow=False,
+                font=dict(size=12, color="#475467"),
+                align="right",
+                bgcolor="rgba(255,255,255,0.6)",
+            )
+        ],
+    )
+    return fig
+
+
+def _to_plain(obj):
+    """递归把 numpy / pandas 对象转成原生 Python，避免 to_json 生成 typed array"""
+    if isinstance(obj, np.generic):
+        return obj.item()
+    if isinstance(obj, np.ndarray):
+        return obj.tolist()
+    if isinstance(obj, (list, tuple)):
+        return [_to_plain(o) for o in obj]
+    if isinstance(obj, dict):
+        return {k: _to_plain(v) for k, v in obj.items()}
+    return obj
+
+
+def fig_to_div_script(fig, mode_key, visible=True, config=None):
+    """把图对象序列化为纯 JSON + div + Plotly.newPlot 脚本，避免 typed array 兼容问题"""
+    div_id = f"fig-{uuid.uuid4().hex}"
+    config = config or {"responsive": True, "displayModeBar": False}
+    payload = _to_plain(fig.to_plotly_json())  # 转成纯 Python 可 JSON 化对象
+    data_json = json.dumps(payload.get("data", []))
+    layout_json = json.dumps(payload.get("layout", {}))
+    div_html = f"<div class=\"mode-chart\" data-mode=\"{mode_key}\" id=\"{div_id}\" style=\"display:{'block' if visible else 'none'}\"></div>"
+    script = (
+        f"try {{\n"
+        f"  Plotly.newPlot('{div_id}', {data_json}, {layout_json}, {json.dumps(config)});\n"
+        f"}} catch (e) {{\n"
+        f"  console.error('Plotly render error', e);\n"
+        f"  const el = document.getElementById('{div_id}');\n"
+        f"  if (el) el.innerText = '图表渲染失败: ' + e;\n"
+        f"}}"
+    )
+    return div_html, script
+
+
+def perfect_share(hist, threshold=0.1):
+    if not hist:
+        return None
     edges = np.asarray(hist["edges"], dtype=float)
     counts = np.asarray(hist["counts"], dtype=float)
     total = counts.sum()
-    probs = counts / total if total > 0 else counts
-    centers = (edges[:-1] + edges[1:]) / 2
-    widths = edges[1:] - edges[:-1]
-    st = hist["stats"]
-    stats_str = f"样本: {st['size']:,} | 均值: {st['mean']:.3f} | 中位数: {st['median']:.3f} | P25/P75: {st['p25']:.3f}/{st['p75']:.3f}"
-    fig = go.Figure(go.Bar(x=centers, y=probs, width=widths, marker=dict(color='teal')))
-    fig.update_layout(
-        title=f"{hist['title']}<br><sub>{stats_str}</sub>",
-        xaxis_title='Rank (0=好)',
-        yaxis_title='比例',
-        bargap=0.05,
-    )
-    return fig
+    if total <= 0:
+        return None
+    acc = 0.0
+    for i, c in enumerate(counts):
+        left, right = edges[i], edges[i + 1]
+        if left >= threshold:
+            break
+        if right <= threshold:
+            acc += c
+        else:
+            # 线性近似分摊跨阈值的桶
+            acc += c * (threshold - left) / (right - left)
+            break
+    return float(acc / total)
 
 
 def format_stats(stats):
     if not stats or stats.get("size", 0) == 0:
         return "无数据"
     return f"样本 {stats['size']:,} | 均值 {stats['mean']:.3f} | 中位数 {stats['median']:.3f} | P25/P75 {stats['p25']:.3f}/{stats['p75']:.3f}"
+
+
+def format_pct(p):
+    if p is None:
+        return "--"
+    return f"{p*100:.1f}%"
+
+
+def format_two_decimals(v):
+    if v is None:
+        return "--"
+    try:
+        return f"{float(v):.2f}"
+    except Exception:
+        return "--"
 
 
 def trading_minutes(o, c):
@@ -104,7 +317,8 @@ def trading_minutes(o, c):
 
 sample_counts = {}
 stats_map = {}
-figs = []
+hists = []
+plot_scripts = []
 T_GLOBAL_USE = T_GLOBAL
 T_SHORT_USE = T_SHORT
 
@@ -117,10 +331,9 @@ if use_result_cache:
     T_SHORT_USE = meta.get('t_short', T_SHORT)
     sample_counts = meta.get('sample_counts', {})
     stats_map = {h['key']: h.get('stats', {}) for h in hists}
-    figs = [fig_from_hist(h) for h in hists]
 else:
     print('✅ 加载配对交易数据...', flush=True)
-    pairs = pd.read_parquet(PAIRS_PATH, columns=['code', 'trade_type', 'buy_timestamp', 'sell_timestamp', 'buy_price', 'sell_price'])
+    pairs = pd.read_parquet(PAIRS_PATH, columns=['code', 'trade_type', 'buy_timestamp', 'sell_timestamp', 'buy_price', 'sell_price', 'matched_qty', 'buy_fee', 'sell_fee'])
     for col in ['buy_timestamp', 'sell_timestamp']:
         if not pd.api.types.is_datetime64_any_dtype(pairs[col]):
             pairs[col] = pd.to_datetime(pairs[col])
@@ -131,6 +344,7 @@ else:
     pairs['open_price'] = pairs['buy_price'].where(~short_mask, pairs['sell_price'])
     pairs['close_price'] = pairs['sell_price'].where(~short_mask, pairs['buy_price'])
     pairs['holding_minutes_trading'] = [trading_minutes(o, c) for o, c in zip(pairs['open_timestamp'], pairs['close_timestamp'])]
+    pairs_group = {c: g for c, g in pairs.groupby('code')}
 
     # 按标的构建日期范围，按交易条数排序
     code_ranges = {}
@@ -142,6 +356,10 @@ else:
     print(f'📈 标的数量: {len(codes_sorted)}', flush=True)
 
     entries_g = []; exits_g = []; entries_s = []; exits_s = []
+    entries_g_notional = []; exits_g_notional = []; entries_s_notional = []; exits_s_notional = []
+    entries_g_pnl = []; exits_g_pnl = []; entries_s_pnl = []; exits_s_pnl = []
+    edges_g = []; edges_g_notional = []; edges_g_pnl = []
+    edges_s = []; edges_s_notional = []; edges_s_pnl = []
 
     CACHE_DIR.mkdir(parents=True, exist_ok=True)
     cache_files = {code: CACHE_DIR / f"{code.replace('.', '_')}.parquet" for code in codes_sorted}
@@ -153,12 +371,12 @@ else:
         lg = bs.login()
         if lg.error_code != '0':
             raise SystemExit('baostock login failed: ' + lg.error_msg)
+        worker_use = 1
     else:
         print('🗄️ 缓存齐全，跳过行情下载，直接读取本地。', flush=True)
+        worker_use = max(1, args.workers)
 
-    for idx, code in enumerate(codes_sorted, 1):
-        if idx % 200 == 0:
-            print(f'进度 {idx}/{len(codes_sorted)} ...', flush=True)
+    def process_code(code):
         start, end = code_ranges[code]
         mkt = code.split('.')[-1].lower(); base = code.split('.')[0]
         bs_code = f"{mkt}.{base}"
@@ -174,7 +392,7 @@ else:
             while rs.error_code == '0' and rs.next():
                 data.append(rs.get_row_data())
             if not data:
-                continue
+                return {}
             cdf = pd.DataFrame(data, columns=rs.fields)
             cdf['datetime'] = pd.to_datetime(cdf['date'] + ' ' + cdf['time'].str[8:10] + ':' + cdf['time'].str[10:12] + ':' + cdf['time'].str[12:14])
             cdf[['open', 'high', 'low', 'close']] = cdf[['open', 'high', 'low', 'close']].astype(float)
@@ -182,49 +400,170 @@ else:
             md = cdf[['high', 'low', 'open', 'close']]
             md.to_parquet(cache_file, index=True)
         else:
-            continue
+            return {}
 
-        trades = pairs[pairs['code'] == code]
+        trades = pairs_group.get(code)
+        if trades is None or trades.empty:
+            return {}
+
+        res = {
+            "entries_g": [], "exits_g": [], "entries_s": [], "exits_s": [],
+            "entries_g_notional": [], "exits_g_notional": [], "entries_s_notional": [], "exits_s_notional": [],
+            "entries_g_pnl": [], "exits_g_pnl": [], "entries_s_pnl": [], "exits_s_pnl": [],
+            "edges_g": [], "edges_g_notional": [], "edges_g_pnl": [],
+            "edges_s": [], "edges_s_notional": [], "edges_s_pnl": [],
+        }
+
         for _, row in trades.iterrows():
-            # 全体窗口
+            qty = float(row.get('matched_qty', 0) or 0)
+            fees = float((row.get('buy_fee', 0) or 0) + (row.get('sell_fee', 0) or 0))
+            notional_in = row['open_price'] * qty
+            pnl = ((row['close_price'] - row['open_price']) * qty if row['trade_type'] != 'short' else (row['open_price'] - row['close_price']) * qty) - fees
+
             es = md.loc[(md.index >= row['open_timestamp']) & (md.index <= row['open_timestamp'] + timedelta(minutes=T_GLOBAL))]
             if not es.empty:
                 lo, hi = es['low'].min(), es['high'].max()
                 er = 0.5 if hi == lo else ((hi - row['open_price']) / (hi - lo) if row['trade_type'] == 'short' else (row['open_price'] - lo) / (hi - lo))
-                entries_g.append(er)
+                res["entries_g"].append(er)
+                res["entries_g_notional"].append((er, notional_in))
+                res["entries_g_pnl"].append((er, max(pnl, 0)))
             xs = md.loc[(md.index >= row['close_timestamp']) & (md.index <= row['close_timestamp'] + timedelta(minutes=T_GLOBAL))]
             if not xs.empty:
                 lo2, hi2 = xs['low'].min(), xs['high'].max()
                 xr = 0.5 if hi2 == lo2 else ((row['close_price'] - lo2) / (hi2 - lo2) if row['trade_type'] == 'short' else (hi2 - row['close_price']) / (hi2 - lo2))
-                exits_g.append(xr)
-            # 超短单窗口
+                res["exits_g"].append(xr)
+                res["exits_g_notional"].append((xr, notional_in))
+                res["exits_g_pnl"].append((xr, max(pnl, 0)))
+
+            hold_slice = md.loc[(md.index >= row['open_timestamp']) & (md.index <= row['close_timestamp'])]
+            if not hold_slice.empty:
+                lo_h, hi_h = hold_slice['low'].min(), hold_slice['high'].max()
+                denom_h = hi_h - lo_h
+                if denom_h <= 0:
+                    edge = 0.0
+                else:
+                    edge = ((row['close_price'] - row['open_price']) / denom_h) if row['trade_type'] != 'short' else ((row['open_price'] - row['close_price']) / denom_h)
+                edge = max(0.0, min(1.0, edge))
+                res["edges_g"].append(edge)
+                res["edges_g_notional"].append((edge, notional_in))
+                res["edges_g_pnl"].append((edge, max(pnl, 0)))
+
             if row['holding_minutes_trading'] <= 10:
                 es_s = md.loc[(md.index >= row['open_timestamp']) & (md.index <= row['open_timestamp'] + timedelta(minutes=T_SHORT))]
                 if not es_s.empty:
                     loS, hiS = es_s['low'].min(), es_s['high'].max()
                     er_s = 0.5 if hiS == loS else ((hiS - row['open_price']) / (hiS - loS) if row['trade_type'] == 'short' else (row['open_price'] - loS) / (hiS - loS))
-                    entries_s.append(er_s)
+                    res["entries_s"].append(er_s)
+                    res["entries_s_notional"].append((er_s, notional_in))
+                    res["entries_s_pnl"].append((er_s, max(pnl, 0)))
                 xs_s = md.loc[(md.index >= row['close_timestamp']) & (md.index <= row['close_timestamp'] + timedelta(minutes=T_SHORT))]
                 if not xs_s.empty:
                     loS2, hiS2 = xs_s['low'].min(), xs_s['high'].max()
                     xr_s = 0.5 if hiS2 == loS2 else ((row['close_price'] - loS2) / (hiS2 - loS2) if row['trade_type'] == 'short' else (hiS2 - row['close_price']) / (hiS2 - loS2))
-                    exits_s.append(xr_s)
+                    res["exits_s"].append(xr_s)
+                    res["exits_s_notional"].append((xr_s, notional_in))
+                    res["exits_s_pnl"].append((xr_s, max(pnl, 0)))
+                if not hold_slice.empty:
+                    res["edges_s"].append(edge)
+                    res["edges_s_notional"].append((edge, notional_in))
+                    res["edges_s_pnl"].append((edge, max(pnl, 0)))
+
+        return res
+
+    all_results = []
+    if worker_use > 1:
+        from concurrent.futures import ProcessPoolExecutor, as_completed
+        import multiprocessing
+        worker_use = min(worker_use, max(1, multiprocessing.cpu_count() - 1))
+        print(f'⚙️ 缓存齐全，启用多进程计算 workers={worker_use}', flush=True)
+        # 预先把不可序列化的对象移除
+        shared_args = {
+            "T_GLOBAL": T_GLOBAL,
+            "T_SHORT": T_SHORT,
+        }
+        def wrapper(code):
+            return process_code(code)
+
+        with ProcessPoolExecutor(max_workers=worker_use) as ex:
+            futures = {ex.submit(wrapper, code): code for code in codes_sorted}
+            for idx, fut in enumerate(as_completed(futures), 1):
+                if idx % 100 == 0:
+                    print(f'进度 {idx}/{len(codes_sorted)} ...', flush=True)
+                res = fut.result()
+                if res:
+                    all_results.append(res)
+    else:
+        if missing_codes:
+            print('⚠️ 存在缺失行情，需要串行下载+计算', flush=True)
+        for idx, code in enumerate(codes_sorted, 1):
+            if idx % 200 == 0:
+                print(f'进度 {idx}/{len(codes_sorted)} ...', flush=True)
+            res = process_code(code)
+            if res:
+                all_results.append(res)
 
     if lg is not None:
         bs.logout()
+
+    # 聚合并行结果
+    agg_keys = [
+        "entries_g", "exits_g", "entries_s", "exits_s",
+        "entries_g_notional", "exits_g_notional", "entries_s_notional", "exits_s_notional",
+        "entries_g_pnl", "exits_g_pnl", "entries_s_pnl", "exits_s_pnl",
+        "edges_g", "edges_g_notional", "edges_g_pnl",
+        "edges_s", "edges_s_notional", "edges_s_pnl",
+    ]
+    merged = {k: [] for k in agg_keys}
+    for res in all_results:
+        for k in agg_keys:
+            merged[k].extend(res.get(k, []))
+
+    entries_g = merged["entries_g"]; exits_g = merged["exits_g"]
+    entries_s = merged["entries_s"]; exits_s = merged["exits_s"]
+    entries_g_notional = merged["entries_g_notional"]; exits_g_notional = merged["exits_g_notional"]
+    entries_s_notional = merged["entries_s_notional"]; exits_s_notional = merged["exits_s_notional"]
+    entries_g_pnl = merged["entries_g_pnl"]; exits_g_pnl = merged["exits_g_pnl"]
+    entries_s_pnl = merged["entries_s_pnl"]; exits_s_pnl = merged["exits_s_pnl"]
+    edges_g = merged["edges_g"]; edges_g_notional = merged["edges_g_notional"]; edges_g_pnl = merged["edges_g_pnl"]
+    edges_s = merged["edges_s"]; edges_s_notional = merged["edges_s_notional"]; edges_s_pnl = merged["edges_s_pnl"]
+
     print('✅ 行情抓取与计算完成', flush=True)
     print('样本数: global entry/exit =', len(entries_g), len(exits_g), '; short entry/exit =', len(entries_s), len(exits_s))
 
+    def unpack_weighted(lst):
+        if not lst:
+            return [], []
+        vals, ws = zip(*lst)
+        return list(vals), list(ws)
+
     hists = []
-    for key, title, data in [
-        ('entries_g', f'全体交易 EntryRank (Tα={T_GLOBAL}分钟, 5min行情, 全量)', entries_g),
-        ('exits_g', f'全体交易 ExitRank (Tα={T_GLOBAL}分钟, 5min行情, 全量)', exits_g),
-        ('entries_s', f'超短单 EntryRank (持仓<=10分钟, Tα={T_SHORT}分钟, 5min行情)', entries_s),
-        ('exits_s', f'超短单 ExitRank (持仓<=10分钟, Tα={T_SHORT}分钟, 5min行情)', exits_s),
-    ]:
-        h = summarize_hist(data, key, title)
+    def add_hist(key, title, data, weights=None):
+        h = summarize_hist(data, key, title, weights=weights)
         if h is not None:
             hists.append(h)
+
+    add_hist('entries_g', f'全体交易 EntryRank (Tα={T_GLOBAL}分钟, 5min行情, 全量)', entries_g)
+    add_hist('exits_g', f'全体交易 ExitRank (Tα={T_GLOBAL}分钟, 5min行情, 全量)', exits_g)
+    add_hist('entries_s', f'超短单 EntryRank (持仓<=10分钟, Tα={T_SHORT}分钟, 5min行情)', entries_s)
+    add_hist('exits_s', f'超短单 ExitRank (持仓<=10分钟, Tα={T_SHORT}分钟, 5min行情)', exits_s)
+
+    ev, ew = unpack_weighted(entries_g_notional); add_hist('entries_g_notional', '全体交易 EntryRank（成交金额加权）', ev, ew)
+    xv, xw = unpack_weighted(exits_g_notional); add_hist('exits_g_notional', '全体交易 ExitRank（成交金额加权）', xv, xw)
+    evp, ewp = unpack_weighted(entries_g_pnl); add_hist('entries_g_pnl', '全体交易 EntryRank（PnL加权，盈利部分）', evp, ewp)
+    xvp, xwp = unpack_weighted(exits_g_pnl); add_hist('exits_g_pnl', '全体交易 ExitRank（PnL加权，盈利部分）', xvp, xwp)
+
+    evs, ews = unpack_weighted(entries_s_notional); add_hist('entries_s_notional', '超短单 EntryRank（成交金额加权）', evs, ews)
+    xvs, xws = unpack_weighted(exits_s_notional); add_hist('exits_s_notional', '超短单 ExitRank（成交金额加权）', xvs, xws)
+    evsp, ewsp = unpack_weighted(entries_s_pnl); add_hist('entries_s_pnl', '超短单 EntryRank（PnL加权，盈利部分）', evsp, ewsp)
+    xvsp, xwsp = unpack_weighted(exits_s_pnl); add_hist('exits_s_pnl', '超短单 ExitRank（PnL加权，盈利部分）', xvsp, xwsp)
+
+    add_hist('edge_g', '全体交易 Edge 捕获率（笔数）', edges_g)
+    ev_edge, ew_edge = unpack_weighted(edges_g_notional); add_hist('edge_g_notional', '全体交易 Edge 捕获率（成交金额加权）', ev_edge, ew_edge)
+    ev_edgep, ew_edgep = unpack_weighted(edges_g_pnl); add_hist('edge_g_pnl', '全体交易 Edge 捕获率（PnL加权，盈利部分）', ev_edgep, ew_edgep)
+
+    add_hist('edge_s', '超短单 Edge 捕获率（笔数）', edges_s)
+    ev_edge_s, ew_edge_s = unpack_weighted(edges_s_notional); add_hist('edge_s_notional', '超短单 Edge 捕获率（成交金额加权）', ev_edge_s, ew_edge_s)
+    ev_edge_sp, ew_edge_sp = unpack_weighted(edges_s_pnl); add_hist('edge_s_pnl', '超短单 Edge 捕获率（PnL加权，盈利部分）', ev_edge_sp, ew_edge_sp)
 
     sample_counts = {
         'entries_g': len(entries_g),
@@ -246,13 +585,210 @@ else:
     print(f'💾 已写入结果缓存: {RESULT_CACHE}')
 
     stats_map = {h['key']: h.get('stats', {}) for h in hists}
-    figs = [fig_from_hist(h) for h in hists]
 
-fig_html_parts = [
-    f.to_html(full_html=False, include_plotlyjs='cdn', default_width='100%', default_height='420px')
-    for f in figs
-]
-charts_html = "\n".join(f"<div class='chart'>{h}</div>" for h in fig_html_parts)
+hist_map = {h["key"]: h for h in hists}
+
+stats_e_g = stats_map.get("entries_g", {})
+stats_x_g = stats_map.get("exits_g", {})
+perfect_e = perfect_share(hist_map.get("entries_g"))
+perfect_x = perfect_share(hist_map.get("exits_g"))
+
+
+def build_mode_figs(is_short=False):
+    modes = []
+    prefix = "short" if is_short else "overall"
+    tg = T_SHORT_USE if is_short else T_GLOBAL_USE
+    def add_mode(mode_key, label, fig):
+        visible = len(modes) == 0
+        div_html, script = fig_to_div_script(fig, mode_key, visible=visible)
+        plot_scripts.append(script)
+        modes.append((mode_key, label, div_html))
+    # rank - 笔数
+    key_e = "entries_s" if is_short else "entries_g"
+    key_x = "exits_s" if is_short else "exits_g"
+    if key_e in hist_map and key_x in hist_map:
+        fig = paired_hist_fig(
+            f"{'超短单' if is_short else '全体交易'} Entry / Exit Rank（窗口 Tα={tg} 分钟，5min 行情）",
+            hist_map[key_e],
+            hist_map[key_x],
+        )
+        add_mode(f"{prefix}_rank_counts", "Rank·笔数", fig)
+    # rank - 金额加权
+    key_e_n = "entries_s_notional" if is_short else "entries_g_notional"
+    key_x_n = "exits_s_notional" if is_short else "exits_g_notional"
+    if key_e_n in hist_map and key_x_n in hist_map:
+        fig = paired_hist_fig(
+            f"{'超短单' if is_short else '全体交易'} Entry / Exit Rank（成交金额加权，Tα={tg} 分钟）",
+            hist_map[key_e_n],
+            hist_map[key_x_n],
+        )
+        add_mode(f"{prefix}_rank_notional", "Rank·金额权重", fig)
+    # rank - PnL加权
+    key_e_p = "entries_s_pnl" if is_short else "entries_g_pnl"
+    key_x_p = "exits_s_pnl" if is_short else "exits_g_pnl"
+    if key_e_p in hist_map and key_x_p in hist_map:
+        fig = paired_hist_fig(
+            f"{'超短单' if is_short else '全体交易'} Entry / Exit Rank（PnL加权，盈利部分，Tα={tg} 分钟）",
+            hist_map[key_e_p],
+            hist_map[key_x_p],
+        )
+        add_mode(f"{prefix}_rank_pnl", "Rank·PnL权重", fig)
+    # Edge
+    key_edge = "edge_s" if is_short else "edge_g"
+    if key_edge in hist_map:
+        fig = single_hist_fig(
+            f"{'超短单' if is_short else '全体交易'} Edge 捕获率（笔数，持仓窗口内波动覆盖度）",
+            hist_map[key_edge],
+            color="#6366f1",
+        )
+        add_mode(f"{prefix}_edge_counts", "Edge·笔数", fig)
+    key_edge_n = "edge_s_notional" if is_short else "edge_g_notional"
+    if key_edge_n in hist_map:
+        fig = single_hist_fig(
+            f"{'超短单' if is_short else '全体交易'} Edge 捕获率（成交金额加权）",
+            hist_map[key_edge_n],
+            color="#4338ca",
+        )
+        add_mode(f"{prefix}_edge_notional", "Edge·金额权重", fig)
+    key_edge_p = "edge_s_pnl" if is_short else "edge_g_pnl"
+    if key_edge_p in hist_map:
+        fig = single_hist_fig(
+            f"{'超短单' if is_short else '全体交易'} Edge 捕获率（PnL加权，盈利部分）",
+            hist_map[key_edge_p],
+            color="#1f2937",
+        )
+        add_mode(f"{prefix}_edge_pnl", "Edge·PnL权重", fig)
+    return modes
+
+
+def render_modes_block(title, subtitle, modes, stats_entry, stats_exit, block_id):
+    if not modes:
+        return ""
+    buttons = "\n".join(
+        [
+            f"<button class=\"mode-btn{' active' if i==0 else ''}\" data-target=\"{block_id}\" data-mode=\"{m[0]}\">{m[1]}</button>"
+            for i, m in enumerate(modes)
+        ]
+    )
+    charts = "\n".join(
+        [
+            m[2]
+            for _, m in enumerate(modes)
+        ]
+    )
+    return f"""
+      <div class="space-y-3 rounded-2xl border border-slate-200 bg-white/90 shadow-sm p-4">
+        <div class="flex items-start justify-between">
+          <div>
+            <div class="text-base font-semibold text-slate-900">{title}</div>
+            <div class="text-sm text-slate-500">{subtitle}</div>
+          </div>
+        </div>
+        <div class="flex flex-wrap gap-2 mb-2">{buttons}</div>
+        <div class="chart" id="{block_id}">{charts}</div>
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          <div class="rounded-xl border border-emerald-100 bg-emerald-50/60 px-3 py-2">
+            <div class="text-xs font-semibold text-emerald-700">Entry</div>
+            <div class="text-sm text-slate-900">{stats_entry}</div>
+          </div>
+          <div class="rounded-xl border border-rose-100 bg-rose-50/60 px-3 py-2">
+            <div class="text-xs font-semibold text-rose-700">Exit</div>
+            <div class="text-sm text-slate-900">{stats_exit}</div>
+          </div>
+        </div>
+      </div>
+    """
+
+
+modes_overall = build_mode_figs(is_short=False)
+modes_short = build_mode_figs(is_short=True)
+
+fig_blocks = []
+fig_blocks.append(
+    render_modes_block(
+        "全体交易",
+        f"窗口 Tα={T_GLOBAL_USE} 分钟，Rank / Edge 支持多种权重视角（按钮切换）",
+        modes_overall,
+        format_stats(stats_map.get("entries_g")),
+        format_stats(stats_map.get("exits_g")),
+        "chart-overall",
+    )
+)
+fig_blocks.append(
+    render_modes_block(
+        "超短单（持仓≤10 分钟）",
+        f"窗口 Tα={T_SHORT_USE} 分钟，聚焦撮合速度与极短期行情偏移（按钮切换权重视角）",
+        modes_short,
+        format_stats(stats_map.get("entries_s")),
+        format_stats(stats_map.get("exits_s")),
+        "chart-short",
+    )
+)
+charts_html = "\n".join(fig_blocks)
+
+plot_scripts_js = "\n".join(plot_scripts)
+
+script_block = f"""
+  <script>
+    {plot_scripts_js}
+    window.addEventListener('load', () => {{
+      if (!location.hash) {{
+        const el = document.getElementById('charts');
+        if (el) el.scrollIntoView({{behavior:'auto', block:'start'}});
+      }}
+      const initGroups = () => {{
+        const groups = new Set();
+        document.querySelectorAll('.mode-btn').forEach(btn => groups.add(btn.getAttribute('data-target')));
+        groups.forEach(g => {{
+          let active = document.querySelector(".mode-btn[data-target='" + g + "'].active");
+          if (!active) {{
+            active = document.querySelector(".mode-btn[data-target='" + g + "']");
+            if (active) active.classList.add('active');
+          }}
+          const mode = active ? active.getAttribute('data-mode') : null;
+          document.querySelectorAll('#' + g + ' .mode-chart').forEach(div => {{
+            const show = div.getAttribute('data-mode') === mode;
+            div.style.display = show ? 'block' : 'none';
+            if (show && window.Plotly && div.id) {{
+              window.Plotly.Plots.resize(div);
+            }}
+          }});
+        }});
+      }};
+      initGroups();
+      document.querySelectorAll('.mode-btn').forEach(btn => {{
+        btn.addEventListener('click', () => {{
+          const target = btn.getAttribute('data-target');
+          const mode = btn.getAttribute('data-mode');
+          document.querySelectorAll(".mode-btn[data-target='" + target + "']").forEach(b => b.classList.remove('active'));
+          btn.classList.add('active');
+          document.querySelectorAll('#' + target + ' .mode-chart').forEach(div => {{
+            const show = div.getAttribute('data-mode') === mode;
+            div.style.display = show ? 'block' : 'none';
+            if (show && window.Plotly && div.id) {{
+              window.Plotly.Plots.resize(div);
+            }}
+          }});
+        }});
+      }});
+      window.addEventListener('resize', () => {{
+        document.querySelectorAll('.mode-chart').forEach(div => {{
+          if (div.style.display !== 'none' && window.Plotly && div.id) {{
+            window.Plotly.Plots.resize(div);
+          }}
+        }});
+      }});
+      // 初始强制 resize 确保首次渲染
+      if (window.Plotly) {{
+        document.querySelectorAll('.mode-chart').forEach(div => {{
+          if (div.style.display !== 'none' && div.id) {{
+            window.Plotly.Plots.resize(div);
+          }}
+        }});
+      }}
+    }});
+  </script>
+"""
 
 REPORT_HTML.parent.mkdir(parents=True, exist_ok=True)
 
@@ -262,76 +798,106 @@ html_text = f"""<!DOCTYPE html>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>择时能力分布（baostock 5min，全量）</title>
-  <script src="https://cdn.plot.ly/plotly-latest.min.js"></script>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://cdn.plot.ly/plotly-2.27.1.min.js"></script>
   <style>
-    :root {{ --bg: #f6f7fb; --card: #fff; --text: #1f2937; --muted: #6b7280; --shadow: 0 2px 10px rgba(0,0,0,0.06); }}
-    body {{ margin: 0; padding: 0; font-family: "Helvetica", "Arial", sans-serif; background: var(--bg); color: var(--text); }}
-    .page {{ max-width: 1180px; margin: 0 auto; padding: 20px; display: grid; gap: 14px; }}
-    .card {{ background: var(--card); border-radius: 12px; padding: 14px 16px; box-shadow: var(--shadow); }}
-    h1 {{ margin: 0 0 8px 0; font-size: 22px; }}
-    h2 {{ margin: 0 0 10px 0; font-size: 17px; color: var(--text); }}
-    p {{ margin: 6px 0; line-height: 1.6; color: #374151; }}
-    .muted {{ color: var(--muted); font-size: 13px; }}
-    .badges {{ display: flex; flex-wrap: wrap; gap: 8px; margin-top: 6px; }}
-    .badge {{ display: inline-flex; align-items: center; padding: 2px 10px; border-radius: 999px; background: #e0f2fe; color: #1d4ed8; font-size: 12px; }}
-    .grid {{ display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 10px; }}
-    .stat {{ background: #f9fafb; border-radius: 10px; padding: 10px 12px; border: 1px solid #e5e7eb; }}
-    .stat .title {{ font-size: 13px; color: var(--muted); margin-bottom: 4px; }}
-    .stat .value {{ font-size: 20px; font-weight: 700; color: var(--text); }}
-    .stat .small {{ font-size: 13px; color: #374151; font-weight: 500; line-height: 1.5; }}
-    .chart {{ margin-top: 10px; }}
-    .section-title {{ font-weight: 700; margin-bottom: 6px; }}
-    .note {{ font-size: 13px; color: #4b5563; margin-top: 6px; }}
+    body {{ font-family: "Noto Sans SC", "Inter", "Helvetica", "Arial", sans-serif; }}
+    .mode-btn {{ padding: 6px 10px; border-radius: 999px; font-size: 13px; border: 1px solid #e2e8f0; background: #f8fafc; color: #475569; cursor: pointer; }}
+    .mode-btn:hover {{ background: #eef2ff; }}
+    .mode-btn.active {{ background: #eef2ff; color: #4338ca; border-color: #c7d2fe; }}
+    .mode-chart {{ width: 100%; }}
   </style>
 </head>
 <body>
-  <div class="page">
-    <div class="card">
-      <h1>⚡ 交易执行分析｜择时能力分布</h1>
-      <div class="badges">
-        <span class="badge">Entry/ExitRank</span>
-        <span class="badge">baostock 5min</span>
-        <span class="badge">Tα 全体 {T_GLOBAL_USE} 分钟</span>
-        <span class="badge">Tα 超短 {T_SHORT_USE} 分钟</span>
+  <div class="bg-slate-50 min-h-screen">
+    <header class="sticky top-0 z-20 border-b border-slate-200 bg-white/90 backdrop-blur">
+      <div class="max-w-7xl mx-auto px-6 py-3 flex items-center justify-between">
+        <div>
+          <div class="text-xs font-semibold text-indigo-600">交易执行分析</div>
+          <h1 class="text-xl font-bold text-slate-900">择时能力分布（Entry/Exit Rank）</h1>
+        </div>
+        <div class="text-[11px] text-slate-500 text-right leading-tight">行情：baostock 5min<br/>窗口：全体 Tα={T_GLOBAL_USE} 分钟｜超短 Tα={T_SHORT_USE} 分钟</div>
       </div>
-      <p>口径：全体交易使用窗口 Tα={T_GLOBAL_USE} 分钟；超短单（持仓≤10 分钟）使用窗口 Tα={T_SHORT_USE} 分钟。Rank∈[0,1]，越接近 0 说明择时越好；空头已镜像处理。</p>
-    </div>
+    </header>
 
-    <div class="card">
-      <h2>样本与概览</h2>
-      <div class="grid">
-        <div class="stat"><div class="title">全体 Entry 样本</div><div class="value">{sample_counts.get('entries_g', 0):,}</div></div>
-        <div class="stat"><div class="title">全体 Exit 样本</div><div class="value">{sample_counts.get('exits_g', 0):,}</div></div>
-        <div class="stat"><div class="title">超短 Entry 样本</div><div class="value">{sample_counts.get('entries_s', 0):,}</div></div>
-        <div class="stat"><div class="title">超短 Exit 样本</div><div class="value">{sample_counts.get('exits_s', 0):,}</div></div>
+    <div class="max-w-7xl mx-auto p-6 space-y-6">
+      <div class="rounded-2xl border border-slate-200 bg-white shadow-sm p-5">
+        <div class="text-sm text-slate-700 leading-relaxed">
+          - 目标：评估买入/卖出点在后续 5 分钟行情窗口内的相对位置，诊断择时优劣。<br/>
+          - Rank∈[0,1]：越接近 0 表示更优（买得更低 / 卖得更高），空头已镜像为可比方向。<br/>
+          - 口径：全体交易窗口 Tα={T_GLOBAL_USE} 分钟；超短单（持仓≤10 分钟）窗口 Tα={T_SHORT_USE} 分钟。
+        </div>
       </div>
-      <div class="grid" style="margin-top:10px;">
-        <div class="stat"><div class="title">全体 Entry 统计</div><div class="small">{format_stats(stats_map.get('entries_g'))}</div></div>
-        <div class="stat"><div class="title">全体 Exit 统计</div><div class="small">{format_stats(stats_map.get('exits_g'))}</div></div>
-        <div class="stat"><div class="title">超短 Entry 统计</div><div class="small">{format_stats(stats_map.get('entries_s'))}</div></div>
-        <div class="stat"><div class="title">超短 Exit 统计</div><div class="small">{format_stats(stats_map.get('exits_s'))}</div></div>
+
+      <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+        <div class="rounded-2xl border border-green-200 bg-green-50 shadow-sm p-4">
+          <div class="text-xs font-semibold text-green-700 uppercase tracking-wide">全体 Entry 均值</div>
+          <div class="text-2xl font-bold text-green-800 mt-1">{format_two_decimals(stats_e_g.get('mean') if stats_e_g else None)}</div>
+          <div class="text-sm text-green-700 mt-1">越低越好，随机基准 ≈ 0.50</div>
+        </div>
+        <div class="rounded-2xl border border-red-200 bg-red-50 shadow-sm p-4">
+          <div class="text-xs font-semibold text-red-700 uppercase tracking-wide">全体 Exit 均值</div>
+          <div class="text-2xl font-bold text-red-800 mt-1">{format_two_decimals(stats_x_g.get('mean') if stats_x_g else None)}</div>
+          <div class="text-sm text-red-700 mt-1">越低越好，随机基准 ≈ 0.50</div>
+        </div>
+        <div class="rounded-2xl border border-green-200 bg-white shadow-sm p-4">
+          <div class="text-xs font-semibold text-green-700 uppercase tracking-wide">完美买入占比 (Rank&lt;0.1)</div>
+          <div class="text-2xl font-bold text-slate-900 mt-1">{format_pct(perfect_e)}</div>
+          <div class="text-sm text-slate-500 mt-1">随机基准 ≈ 10%</div>
+        </div>
+        <div class="rounded-2xl border border-red-200 bg-white shadow-sm p-4">
+          <div class="text-xs font-semibold text-red-700 uppercase tracking-wide">完美卖出占比 (Rank&lt;0.1)</div>
+          <div class="text-2xl font-bold text-slate-900 mt-1">{format_pct(perfect_x)}</div>
+          <div class="text-sm text-slate-500 mt-1">随机基准 ≈ 10%</div>
+        </div>
       </div>
-      <p class="note">说明：指标基于交易时段分钟数；空头价格已镜像，保证 Rank 可比。</p>
-    </div>
 
-    <div class="card">
-      <h2>分布直方图</h2>
-      <p class="note">采用预聚合分箱，页面轻量可直接嵌入 iframe。</p>
-      {charts_html}
-    </div>
+      <a id="charts"></a>
+      <div class="space-y-4">
+        {charts_html}
+        <div class="grid grid-cols-2 sm:grid-cols-4 gap-3">
+          <div class="rounded-xl border border-slate-200 bg-white px-3 py-2">
+            <div class="text-xs text-slate-500">全体 Entry 样本</div>
+            <div class="text-lg font-semibold text-slate-900">{sample_counts.get('entries_g', 0):,}</div>
+          </div>
+          <div class="rounded-xl border border-slate-200 bg-white px-3 py-2">
+            <div class="text-xs text-slate-500">全体 Exit 样本</div>
+            <div class="text-lg font-semibold text-slate-900">{sample_counts.get('exits_g', 0):,}</div>
+          </div>
+          <div class="rounded-xl border border-slate-200 bg-white px-3 py-2">
+            <div class="text-xs text-slate-500">超短 Entry 样本</div>
+            <div class="text-lg font-semibold text-slate-900">{sample_counts.get('entries_s', 0):,}</div>
+          </div>
+          <div class="rounded-xl border border-slate-200 bg-white px-3 py-2">
+            <div class="text-xs text-slate-500">超短 Exit 样本</div>
+            <div class="text-lg font-semibold text-slate-900">{sample_counts.get('exits_s', 0):,}</div>
+          </div>
+        </div>
+        <p class="text-sm text-slate-600 leading-relaxed">
+          说明：Rank 以交易后续 5 分钟行情区间的相对位置度量；全体/超短分别使用 Tα={T_GLOBAL_USE}/{T_SHORT_USE} 分钟窗口，空头已镜像，便于与多头可比。
+        </p>
+      </div>
 
-    <div class="card">
-      <h2 class="section-title">实现方式</h2>
-      <p>数据来源：订单配对 data/paired_trades_fifo.parquet；行情来源：baostock 5min，缓存目录 data/cache/baostock_5min（若文件存在则复用，不再请求）。</p>
-      <p>计算口径：全体交易窗口 Tα={T_GLOBAL_USE} 分钟；超短单（持仓≤10 分钟）窗口 Tα={T_SHORT_USE} 分钟。Entry/ExitRank ∈[0,1]，0=择时佳、1=择时差，空头方向已镜像。</p>
-      <h2 class="section-title">制作目的</h2>
-      <p>用于“交易执行分析”板块诊断全体与超短单的择时分布，支持后续与指数或基准盘面横向对比。</p>
-      <p class="note">如需更新，运行 scripts/run_entry_exit_rank_baostock.py（自动生成并复制到 reports/visualization_analysis/ 与 docs/；若算法或窗口改动请加 --recompute 或删除结果缓存 {RESULT_CACHE}）。</p>
+      <div class="rounded-2xl border border-slate-200 bg-white shadow-sm p-4 space-y-2">
+        <div class="text-base font-semibold text-slate-900">页面目的</div>
+        <p class="text-slate-700 leading-relaxed">衡量买入/卖出点相对于窗口内极值的位置，快速判断策略在不同持仓时长（全体、超短）下的择时是否优于随机基准。</p>
+        <div class="text-base font-semibold text-slate-900">实现方式</div>
+        <ul class="text-slate-700 text-sm leading-relaxed list-disc pl-5 space-y-1">
+          <li>行情窗口：全体交易用 Tα={T_GLOBAL_USE} 分钟，超短单（持仓≤10 分钟）用 Tα={T_SHORT_USE} 分钟；基于 5 分钟 K 线，空头已镜像成“买低卖高”口径。</li>
+          <li>EntryRank/ExitRank：多头定义 EntryRank = (买价-区间最低)/(区间最高-最低)，ExitRank = (区间最高-卖价)/(区间最高-最低)；空头反向；无波动置 0.5。Rank∈[0,1]，越低越优。</li>
+          <li>Edge 捕获率：持仓区间内 (平仓价-开仓价)/(区间最高-最低)，空头镜像后裁剪到 [0,1]，衡量吃到的波动占比。</li>
+          <li>加权视角：提供笔数、成交金额权重、PnL（盈利部分）权重三种分布；按按钮切换 Rank/Edge 视角。</li>
+          <li>随机基准：直方图叠加 1/桶数的随机均匀基准线，并标出中位数虚线，用于对照是否优于随机择时。</li>
+        </ul>
+      </div>
     </div>
   </div>
+  __SCRIPT_BLOCK__
+
 </body>
 </html>
 """
+html_text = html_text.replace("__SCRIPT_BLOCK__", script_block)
 
 REPORT_HTML.write_text(html_text, encoding='utf-8')
 REPORT_TXT.write_text(

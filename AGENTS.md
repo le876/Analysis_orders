@@ -2,9 +2,13 @@
 
 ## 环境信息与沟通约定
 当前仓库在 Linux (Ubuntu 22.04.2 LTS, 内核 6.8.0-85-generic, x86_64 架构) 上维护；若迁移至其他平台，请注意字体和 Plotly 渲染差异。跨团队沟通、提交说明与代码注释均应优先使用中文，必要时补充精确英文翻译。
+当前仓库运行时需调用conda环境quant_env。
 
 ## 项目结构与模块组织
 核心分析代码位于 `src/lightweight_analysis.py`，如需扩展请在 `src/` 下新增模块并由主类统一调度。输入数据放置在 `data/` 与 `benchmark_data/`，盯市与回测结果保存在 `mtm_analysis_results/`。脚本会把可视化与缓存写到 `reports/visualization_analysis/`，发布到 GitHub Pages 时将所需文件同步到 `docs/`。临时虚拟环境目录 `quant_env/` 与各类缓存请保持在 `.gitignore` 管控范围内。
+
+## 设计页面必读
+所有前端/可视化页面的设计、改版或新增图表前，必须先阅读并遵守 `documents/可视化页面设计准则.md`，保持页面风格一致，避免日期轴被序列化为大数字等已知问题反复出现。
 
 ## 构建、测试与开发命令
 - `python -m venv .venv && source .venv/bin/activate`：如不复用 `quant_env/`，先创建隔离环境。
@@ -40,6 +44,7 @@
   - IC 质量监控：`ic_distribution_light.html`，`ic_timeseries_light.html`，`ic_stability_regime_light.html` → `documents/各页面指导文档/IC质量监控页面.md`
   - 预测分组/真实关系：`pred_quantile_closed_trade_light.html`，`pred_real_relationship_light.html` → `documents/各页面指导文档/pred,real,绝对盈利分组对比.md`
   - 策略表现与基准对比：`cumulative_returns_comparison_light.html`，`strategy_vs_benchmark_light.html`，`strategy_sharpe_nav.html`，`recon_diagnosis.html` → `documents/各页面指导文档/策略表现与基准对比页面.md`（相关：`documents/各页面指导文档/累积收益对比页面修复记录.md`，`documents/各页面指导文档/高频β等权市场基准说明.md`）
+  - 仪表板与索引：`index.html`，`lightweight_dashboard.html` → `documents/各页面指导文档/仪表板与导航页面.md`
 - 新页面或暂缺文档时：编写对应说明文档（含目的、算法/口径、输出路径、历史与待办），并更新本节映射。
 
 ## 外置资源

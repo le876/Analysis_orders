@@ -1,7 +1,7 @@
 ﻿#!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-轻量级量化策略分析脚本
+量化策略分析脚本
 解决HTML文件过大导致浏览器无法加载的问题
 """
 
@@ -96,7 +96,7 @@ builtins.print = _print_no_icons
 
 
 class LightweightAnalysis:
-    """轻量级量化策略分析器 - 优化浏览器加载性能"""
+    """量化策略分析器 - 优化浏览器加载性能"""
     
     def __init__(self, data_path: str = "data/orders.parquet", benchmark_dir: str = "benchmark_data"):
         self.data_path = data_path
@@ -227,7 +227,7 @@ class LightweightAnalysis:
     # === 授信/保证金配置加载 ===
     def _load_credit_rules_from_md(self, md_path: str = "可视化输出指导文档/授信与保证金规则采集清单.md") -> dict:
         """从 Markdown 末尾的 YAML 代码块读取授信/保证金配置。
-        - 优先尝试使用 PyYAML 解析；若不可用，使用轻量级解析器处理常用键。
+        - 优先尝试使用 PyYAML 解析；若不可用，使用简易解析器处理常用键。
         - 返回 dict，位于顶层 key 'credit_rules' 下的条目会被提升至同级。
         """
         path = Path(md_path)
@@ -255,7 +255,7 @@ class LightweightAnalysis:
             if isinstance(data, dict):
                 cfg = data.copy()
         except Exception:
-            # 轻量级解析：仅解析常用扁平键与简单嵌套
+            # 简易解析：仅解析常用扁平键与简单嵌套
             current_section = []
             data: dict = {}
             for raw in yaml_text.splitlines():
@@ -709,8 +709,8 @@ class LightweightAnalysis:
         return idx_df[['datetime', 'idx_ret']], source_tag
         
     def model_performance_analysis(self):
-        """轻量级模型性能分析"""
-        print("\n<i class='fas fa-bullseye text-red-500'></i> === 模型性能分析 (轻量级) ===")
+        """模型性能分析"""
+        print("\n<i class='fas fa-bullseye text-red-500'></i> === 模型性能分析 ===")
         data_processing_steps = ""
         risk_free_rate_annual = 0.02
         rf_source = "fallback_default"
@@ -2364,70 +2364,37 @@ class LightweightAnalysis:
             return "N/A"
 
         recon_explain_html = f"""
-        <h4><i class='fas fa-thumbtack text-red-400'></i> 未实现盈亏如何计算（Recon）</h4>
-        <p><b>定义</b>：对每只 <code>Code</code>，先用 FIFO 将买卖配对得到已实现盈亏；剩余未被配对的头寸为未平仓部分，其估值采用期末价格近似（本实现使用该股票<strong>最后一笔订单的 <code>price</code> 字段</strong>作为期末价近似）。</p>
+        <h4>盈亏对账口径</h4>
         <ol>
-            <li><b>剩余头寸</b>：
-                <br>剩余多头数量 = 方向为 <code>B</code> 的总 <code>tradeQty</code> − 已配对成交量
-                <br>剩余空头数量 = 方向为 <code>S</code> 的总 <code>tradeQty</code> − 已配对成交量
-            </li>
-            <li><b>期末价</b>：该股票最后一笔订单的 <code>price</code>（收盘价近似）。</li>
-            <li><b>未实现盈亏</b>：
-                <br>多头：剩余多头数量 × 期末价 − 剩余多头成本 − 剩余多头费用
-                <br>空头：剩余空头所得 − 剩余空头数量 × 期末价 − 剩余空头费用
-                <br>合计为两者求和。
-            </li>
+            <li><b>已实现部分</b>：基于 FIFO 配对的净收益直接求和。</li>
+            <li><b>未实现部分</b>：汇总未被配对的 <code>tradeQty</code>，用该标的最后一笔 <code>price</code> 近似收盘价估值，按方向扣除或回补成本与 <code>fee</code>。</li>
+            <li><b>Recon 对齐</b>：已实现盈亏 + 未实现盈亏 与盯市总绝对盈利对照，差异主要来自末价近似、费用四舍五入及未计入的分红/融资。</li>
         </ol>
-        <p><b>本期Recon</b>：已实现盈亏={_fmt_num(realized_pnl)}，未实现盈亏={_fmt_num(unrealized_pnl)}，合计={_fmt_num(realized_plus_unreal)}；盯市总绝对盈利={_fmt_num(mtm_total_abs)}；差额={_fmt_num(recon_diff)}。</p>
-        <ul>
-            <li>差额来源：末价近似与收盘价差、<code>fee</code> 四舍五入误差、股息/融资等现金流。</li>
-            <li>结论：两口径已高度一致。<b>信号归因</b>建议采用配对口径（已实现+组归因），<b>整段总盈利</b>建议采用盯市口径。</li>
-        </ul>
+        <p>本期 Recon：已实现盈亏={_fmt_num(realized_pnl)}，未实现盈亏={_fmt_num(unrealized_pnl)}，合计={_fmt_num(realized_plus_unreal)}；盯市总绝对盈利={_fmt_num(mtm_total_abs)}；差额={_fmt_num(recon_diff)}。</p>
         """
         
         explanation_html = f"""
-        <h4><i class='fas fa-bullseye text-red-500'></i> 基于完整交易的绝对收益分析说明</h4>
+        <h4>页面目的</h4>
         <ul>
-            <li><b>分析目的</b>: 验证买入时的预测值与完整交易绝对收益的关系</li>
-            <li><b>配对方法</b>: 采用FIFO（先进先出）原则配对买卖订单</li>
-            <li><b>收益计算</b>: 绝对收益 = 卖出金额 - 买入金额 - 买入手续费 - 卖出手续费</li>
-            <li><b>分组依据</b>: 按买入时的pred值将完整交易分为{n_groups}组</li>
-            <li><b>相关性</b>: pred-real={correlation_pred_real:.4f}，pred-绝对收益={correlation_pred_profit:.4f}</li>
+            <li>检验买入信号 <code>pred</code> 与完整交易绝对收益的单调性，评估信号排序价值。</li>
+            <li>识别盈利集中在哪些信号分组，为阈值、持仓时长和风控调节提供依据。</li>
         </ul>
-        <h4><i class='fas fa-chart-bar text-indigo-500'></i> 结果解读</h4>
-        <ul>
-            <li><b>总交易对数</b>: {total_trades:,} 笔完整交易</li>
-            <li><b>总绝对盈利</b>: {total_profit:.2f}（正值表示盈利，负值表示亏损）</li>
-            <li><b>整体胜率</b>: {overall_win_rate*100:.1f}%</li>
-            <li><b>信号有效性</b>: {"有效" if (correlation_pred_profit is not np.nan and correlation_pred_profit > 0.2 and max(y_absolute_profit_sum) > min(y_absolute_profit_sum)) else "需要改进"}</li>
-        </ul>
+        <h4>实现方式</h4>
+        <ol>
+            <li>按 <code>Code</code> 和 <code>Timestamp</code> 先后对 <code>direction</code> 为 <code>B/S</code> 的订单执行 FIFO 配对，单笔净收益 = 卖出 <code>tradeAmount</code> − 买入 <code>tradeAmount</code> − 买卖两端 <code>fee</code>，并记录开仓时的 <code>pred</code>。</li>
+            <li>将完整配对按 <code>pred</code> 分位划分为 {n_groups} 组，计算每组总绝对盈利、平均净收益与胜率，并绘制分组柱状与累计曲线。</li>
+            <li>输出相关性指标：<code>pred</code> 与 <code>real</code>、与单笔绝对盈利的皮尔逊相关，用于验证信号排序是否带来收益差异。</li>
+            <li>指标面板同步展示完整交易对数量({total_trades:,})、总绝对盈利({total_profit:.2f})、最高/最低分组差值和整体胜率({overall_win_rate*100:.1f}%)。</li>
+        </ol>
         """
         
         pred_real_processing_steps = f"""
-        <div style="margin-top: 30px; padding: 15px; background-color: #f8f9fa; border-left: 4px solid #17a2b8;">
-        <h4><i class='fas fa-clipboard-list text-blue-500'></i> 完整交易配对详细过程</h4>
-        <ol>
-            <li><b>数据预处理</b>: 提取买卖订单的关键字段（<code>Code</code>、<code>direction</code>、<code>pred</code>、<code>tradeAmount</code>、<code>fee</code>、<code>tradeQty</code>）</li>
-            <li><b>按股票分组</b>: 分别处理每只 <code>Code</code> 的订单序列</li>
-            <li><b>FIFO配对算法</b>:
-                <ul>
-                    <li>维护买入订单队列，按 <code>Timestamp</code> 先后排序</li>
-                    <li>每个方向为 <code>S</code>（卖出）的订单按FIFO原则与买入订单匹配</li>
-                    <li>处理部分成交情况（一个卖单对应多个买单或反之）</li>
-                </ul>
-            </li>
-            <li><b>绝对收益计算</b>: 
-                单笔配对绝对收益 = 卖出时 <code>tradeAmount</code> - 买入时 <code>tradeAmount</code> - 买入时 <code>fee</code> - 卖出时 <code>fee</code>
-            </li>
-            <li><b>归因分析</b>: 将每笔完整交易的收益归因到买入时的 <code>pred</code> 值</li>
-            <li><b>分组统计</b>: 按买入时 <code>pred</code> 值分{n_groups}组，计算各组总收益、平均收益、胜率</li>
-        </ol>
-        <p><b>关键改进</b>:</p>
+        <div style="margin-top: 12px; padding: 12px; background-color: #f8f9fa; border-left: 4px solid #17a2b8;">
+        <h4>计算要点</h4>
         <ul>
-            <li><b>真实收益</b>: 不再使用 <code>real</code> 字段，而是计算实际的买卖差价收益</li>
-            <li><b>费用考虑</b>: 完整考虑买卖两端的 <code>fee</code> 成本</li>
-            <li><b>信号归因</b>: 明确将收益归因到触发交易的买入信号（<code>pred</code> 值）</li>
-            <li><b>业务意义</b>: 直接衡量预测信号的"开仓"指导能力</li>
+            <li>买入成交金额 = <code>tradeAmount</code>（<code>B</code>方向），卖出成交金额同理；费用 <code>fee</code> 按买卖两端实付计入。</li>
+            <li>单笔净收益 = 卖出金额 − 买入金额 − 买卖两端 <code>fee</code>；单笔绝对收益取其绝对值用于分组累加。</li>
+            <li>组内指标（总绝对盈利、平均净收益、胜率）全部基于配对结果计算，未直接使用 <code>real</code> 作为收益。</li>
         </ul>
         </div>
         """
@@ -2435,7 +2402,7 @@ class LightweightAnalysis:
         self._save_figure_with_details(
             fig,
             name='pred_real_relationship_light',
-            title='预测值与实际收益关系分析（轻量化）',
+            title='预测值与实际收益关系分析',
             explanation_html=explanation_html + pred_real_processing_steps + recon_explain_html,
             metrics=pred_real_metrics
         )
@@ -2670,85 +2637,60 @@ class LightweightAnalysis:
         if diagnoses:
             diagnosis_text = "；".join(diagnoses)
             explanation_html = f"""
-            <h4><i class='fas fa-question-circle text-yellow-500'></i> 盈利悖论诊断结果</h4>
-            <div style="background: #fff3cd; padding: 15px; border-left: 4px solid #ffc107; margin: 10px 0;">
-                <p><strong>发现的问题：</strong></p>
-                <p>{diagnosis_text}</p>
-            </div>
-            <h4><i class='fas fa-chart-bar text-indigo-500'></i> 分析说明</h4>
+            <h4>页面目的</h4>
             <ul>
-                <li><b>理论收益</b>: 基于real字段的原始收益预期</li>
-                <li><b>实际盈亏率</b>: 考虑交易方向和费用后的真实收益</li>
-                <li><b>核心问题</b>: 模型预测准确，但实际执行存在系统性损耗</li>
+                <li>对比理论收益与实际盈亏，定位信号正确但收益下滑的执行损耗。</li>
+                <li>用分位分组、费用率与方向占比诊断收益脱节的具体原因。</li>
             </ul>
-            <h4><i class='fas fa-lightbulb text-yellow-500'></i> 优化建议</h4>
-            <ul>
-                <li>降低交易频率，减少费用负担</li>
-                <li>优化仓位管理，提高资金利用效率</li>
-                <li>调整交易方向策略，确保方向性收益</li>
-                <li>重点关注高预测值交易的执行质量</li>
-            </ul>
+            <h4>实现方式</h4>
+            <ol>
+                <li>按 <code>pred</code> 分位划分为 {n_groups} 组：理论收益 = <code>real × tradeAmount</code>（卖出方向取相反号），实际收益 = 理论收益 − <code>fee</code>。</li>
+                <li>组内收益率 = 组内实际盈亏 ÷ 组内成交额；同步记录费用率、买卖比例、最高/最低组收益差。</li>
+                <li>整体诊断输出实际收益率 {actual_return_rate*100:.3f}% 与费用影响 {fee_impact*100:.4f}% ，并列出异常模式。</li>
+            </ol>
+            <h4>诊断结果</h4>
+            <p style="margin:8px 0; padding:10px; border-left:4px solid #ffc107; background:#fff3cd;">{diagnosis_text}</p>
             """
         else:
             explanation_html = """
-            <h4><i class='fas fa-check-circle text-green-500'></i> 未发现明显的系统性问题</h4>
-            <p>模型预测准确且执行正常，收益为负可能是由于市场环境或其他外部因素。</p>
+            <h4>页面目的</h4>
+            <ul>
+                <li>对比理论收益与实际盈亏，确认信号与执行是否一致。</li>
+            </ul>
+            <h4>实现方式</h4>
+            <ol>
+                <li>按 <code>pred</code> 分组，计算理论收益（方向加权的 <code>real × tradeAmount</code>）与实际收益（扣除 <code>fee</code>）。</li>
+                <li>组内收益率以成交额为分母，整体输出实际收益率与费用影响。</li>
+            </ol>
+            <p style="margin:8px 0; padding:10px; border-left:4px solid #4caf50; background:#e8f5e9;">未发现系统性偏差，收益波动更多由市场环境或样本噪声驱动。</p>
             """
         
         # 添加详细的数据处理过程说明 - 重点解释收益计算差异
         paradox_processing_steps = f"""
         <div style="margin-top: 30px; padding: 15px; background-color: #fff3cd; border-left: 4px solid #ffc107;">
-        <h4><i class='fas fa-search text-blue-400'></i> 收益计算方法详细对比</h4>
-        <p><b>为什么之前显示-8.83%，现在显示{actual_return_rate*100:.3f}%？</b></p>
-        
-        <h5><i class='fas fa-times-circle text-red-500'></i> 之前错误的计算方法：</h5>
+        <h4>计算口径</h4>
         <ol>
-            <li><b>忽略交易方向</b>: 直接使用real字段，没有区分买入(B)和卖出(S)</li>
-            <li><b>错误的聚合方式</b>: 股票-日聚合时简单取平均，丢失了方向信息</li>
-            <li><b>基准参考错误</b>: 可能使用了不恰当的收益率计算基准</li>
+            <li><b>理论盈亏</b>：<code>direction</code>=B 取 <code>real × tradeAmount</code>，<code>direction</code>=S 取相反号，按分组求和。</li>
+            <li><b>实际盈亏</b>：理论盈亏 − <code>fee</code>，费用率 = 组内 <code>fee</code> 总额 ÷ 组内成交额。</li>
+            <li><b>收益率</b>：组内收益率 = 组内实际盈亏 ÷ 组内成交额；当分母≤0或缺失时记为 NaN 不展示。</li>
         </ol>
-        
-        <h5><i class='fas fa-check-circle text-green-500'></i> 现在正确的计算方法：</h5>
-        <ol>
-            <li><b>考虑交易方向</b>:
-                <br>• 买入(B): theoretical_pnl = real × tradeAmount
-                <br>• 卖出(S): theoretical_pnl = -real × tradeAmount</li>
-            <li><b>扣除交易费用</b>: actual_pnl = theoretical_pnl - fee</li>
-            <li><b>计算真实收益率</b>: pnl_rate = total_pnl / total_volume</li>
-        </ol>
+        <p style="margin:6px 0 0 0;">当前整体实际收益率 {actual_return_rate*100:.3f}% ，费用影响 {fee_impact*100:.4f}% 。</p>
         </div>
         
         <div style="margin-top: 20px; padding: 15px; background-color: #f8f9fa; border-left: 4px solid #17a2b8;">
-        <h4><i class='fas fa-clipboard-list text-blue-500'></i> 数据处理详细过程</h4>
+        <h4>数据处理流程</h4>
         <ol>
-            <li><b>数据源</b>: orders.parquet文件的pred, real, direction, tradeAmount, fee字段</li>
-            <li><b>数据清洗</b>: 移除任何必要字段有缺失值的记录</li>
-            <li><b>按pred分组</b>: 使用pd.qcut()分为{n_groups}组</li>
-            <li><b>方向性盈亏计算</b>: 
-                <br>• 遍历每个交易记录
-                <br>• 根据direction字段应用正确的盈亏公式
-                <br>• 扣除实际发生的交易费用</li>
-            <li><b>组内汇总</b>: 计算每组的总盈亏、总交易量、收益率</li>
-            <li><b>费用分析</b>: 计算平均费用率 = 总费用 / 总交易量</li>
-            <li><b>图表对比</b>: 
-                <br>• 蓝色柱(理论收益): 基于real字段的原始值
-                <br>• 红色柱(实际盈亏): 考虑方向和费用后的真实收益率
-                <br>• 绿色线(预测值): pred字段的平均值趋势</li>
+            <li><b>字段</b>：使用 <code>pred</code>、<code>real</code>、<code>direction</code>、<code>tradeAmount</code>、<code>fee</code>。</li>
+            <li><b>分组</b>：按 <code>pred</code> 分位分为{n_groups}组，确保每组样本量近似均衡。</li>
+            <li><b>聚合</b>：计算分组理论盈亏、实际盈亏、收益率与费用率，并在图表中对比蓝/红柱（理论/实际）与绿色 <code>pred</code> 线。</li>
         </ol>
-        
-        <p><b>关键发现</b>:</p>
-        <ul>
-            <li><b>实际收益率{actual_return_rate*100:.3f}%</b>: 这是考虑交易方向后的真实盈利能力</li>
-            <li><b>费用影响{fee_impact*100:.4f}%</b>: 交易费用对收益的侵蚀程度</li>
-            <li><b>方向效应</b>: 正确的买卖方向判断是盈利的关键</li>
-        </ul>
         </div>
         """
         
         self._save_figure_with_details(
             fig_paradox,
             name='profitability_paradox_light',
-            title='盈利悖论分析（轻量化）',
+            title='盈利悖论分析',
             explanation_html=explanation_html + paradox_processing_steps,
             metrics=paradox_metrics
         )
@@ -2997,35 +2939,25 @@ class LightweightAnalysis:
         
         # 生成说明文档
         portfolio_explanation = f"""
-        <h4><i class='fas fa-briefcase text-gray-600'></i> 页面目的</h4>
-        <p>展示每日收盘时刻的资产负债快照，帮助评估策略收市时的资金占用、仓位结构以及调整成本，便于与收益表现结合诊断。</p>
-        <h4><i class='fas fa-chart-line text-green-500'></i> 图线含义</h4>
+        <h4>页面目的</h4>
         <ul>
-            <li><b>现金余额（绿色）</b>: 收盘后留存的现金头寸，体现策略在资金安全垫与融资需求上的取舍。</li>
-            <li><b>多头持仓市值（蓝色）</b>: 按收盘价估算的多头持仓规模，对应收盘时的多头敞口。</li>
-            <li><b>空头持仓市值（红色）</b>: 收盘时的空头持仓绝对金额，反映对冲或做空力度。</li>
-            <li><b>每日交易费用（橙色，右轴）</b>: 当日发生的全部手续费、滑点等成本，用于衡量仓位调整的代价。</li>
+            <li>呈现收盘时的现金、多空敞口与交易费用，评估资金安全垫和杠杆/对冲使用度。</li>
+            <li>结合日度费用走势，判断调仓节奏是否带来额外成本压力。</li>
+            <li>为对比收益曲线提供资产端口径，观察收盘结构随时间的稳定性。</li>
         </ul>
-        <h4><i class='fas fa-search text-blue-400'></i> 使用建议</h4>
-        <ul>
-            <li><b>收盘仓位节奏</b>: 结合多头/空头曲线，判断策略是否在重要日期显著增减仓。</li>
-            <li><b>资金安全垫</b>: 关注现金曲线的低点与波动，评估是否存在资金吃紧或闲置。</li>
-            <li><b>杠杆与对冲</b>: 负现金或显著空头敞口提示杠杆使用程度，需要核对保证金占用。</li>
-            <li><b>调整成本</b>: 手续费与仓位变动同时放大时，应进一步分析是否产生额外的交易损耗。</li>
-        </ul>
-        <h4><i class='fas fa-cog text-gray-500'></i> 数据生成流程</h4>
+        <h4>实现方式</h4>
         <ol>
-            <li>读取 <code>mtm_analysis_results/daily_nav_revised.csv</code>，提取收盘现金、多头市值、空头市值及总资产字段并统一为数值型。</li>
-            <li>使用正确的初始本金 62,090,808 元（基于首日最低所需本金 47,762,160 × 1.3），重新计算每日现金余额和总资产。</li>
-            <li>从订单明细中按日聚合手续费，合并至盯市数据，缺失日期填补为 0。</li>
-            <li>按时间排序后可选抽样（默认保留≤200个点），以在图表中展示完整的收盘序列。</li>
+            <li>按 <code>Timestamp</code> 的自然日聚合订单现金流：买入(<code>B</code>)记为 <code>tradeAmount + fee</code> 现金流出，卖出(<code>S</code>)记为 <code>tradeAmount - fee</code> 回笼，得到每日净现金变动与手续费。</li>
+            <li>以期初资金为起点，将净现金流叠加至收盘估值表中的多头/空头市值，回推当日收盘现金余额。</li>
+            <li>收盘多头/空头市值直接取收盘估值；总资产=现金+多头市值−空头市值，手续费曲线为逐日汇总的 <code>fee</code>（右轴）。</li>
+            <li>为保证加载性能，若样本较长会按时间抽样展示，但全部指标均基于全量数据计算。</li>
         </ol>
         """
         
         self._save_figure_with_details(
             fig_portfolio,
             name='portfolio_composition_light',
-            title='收盘后持仓市值（轻量化）',
+            title='收盘后持仓市值',
             explanation_html=portfolio_explanation,
             metrics=portfolio_metrics
         )
@@ -3166,21 +3098,23 @@ class LightweightAnalysis:
 
             # 说明
             pies_explain = """
-            <h4><i class='fas fa-chart-bar text-indigo-500'></i> 交易结构（饼图）</h4>
+            <h4>页面目的</h4>
             <ul>
-                <li>成交额口径：使用配对成交（FIFO）后的买入额+卖出额总和，按股票汇总。</li>
-                <li>市值分桶：默认单位亿元，≥1000为大盘，≥100为中盘，其余为小/微盘；未知为未获取到市值。</li>
-                <li>行业口径：来自baostock行业（若缺失标记为未知）；过多行业时合并为“其他”。</li>
-                <li>板块推断：基于代码前缀推断主板/创业板/科创板；无法识别标记为未知。</li>
+                <li>梳理成交额在市值分桶、行业与交易所板块的分布，识别资金偏好与集中度。</li>
+                <li>为后续与盈利占比对照，观察“投得多是否赚得多”。</li>
             </ul>
-            <div style="background:#fff3cd; padding:10px; border-left:4px solid #ffc107;">
-            注：本图用于识别策略在不同市值/行业/板块上的成交额分布，便于判断偏好与集中度。
-            </div>
+            <h4>实现方式</h4>
+            <ol>
+                <li>按 <code>Code</code> 聚合订单的成交额：买入与卖出均取 <code>tradeAmount</code> 的绝对值求和，得到单标的累计成交额。</li>
+                <li>基于 <code>Code</code> 映射标的市值分桶、行业和交易所板块，无法识别的归为“未知”。</li>
+                <li>按分类汇总成交额并计算占比绘制饼图；类别过多时合并尾部为“其他”以突出主力分布。</li>
+            </ol>
+            <div style="margin-top:8px; padding:10px; border-left:4px solid #ffc107; background:#fff3cd;">解读提示：查看成交额集中度是否与策略预期一致，若某类标的占比过高且收益不佳，应结合盈利占比图进一步诊断。</div>
             """
 
-            self._save_figure_with_details(fig_mc, name='amount_by_market_cap_pie_light', title='按市值大小的交易金额占比（轻量化）', explanation_html=pies_explain, metrics=mc_metrics)
-            self._save_figure_with_details(fig_ind, name='amount_by_industry_pie_light', title='按行业的交易金额占比（轻量化）', explanation_html=pies_explain, metrics=ind_metrics)
-            self._save_figure_with_details(fig_board, name='amount_by_board_pie_light', title='按交易所板块的交易金额占比（轻量化）', explanation_html=pies_explain, metrics=board_metrics)
+            self._save_figure_with_details(fig_mc, name='amount_by_market_cap_pie_light', title='按市值大小的交易金额占比', explanation_html=pies_explain, metrics=mc_metrics)
+            self._save_figure_with_details(fig_ind, name='amount_by_industry_pie_light', title='按行业的交易金额占比', explanation_html=pies_explain, metrics=ind_metrics)
+            self._save_figure_with_details(fig_board, name='amount_by_board_pie_light', title='按交易所板块的交易金额占比', explanation_html=pies_explain, metrics=board_metrics)
 
             # 4) 盈利金额占比（基于正的 absolute_profit）
             if 'absolute_profit' in pairs.columns:
@@ -3227,12 +3161,17 @@ class LightweightAnalysis:
                 }
 
                 profit_explain = """
-                <h4><i class='fas fa-chart-line text-green-500'></i> 盈利金额占比（子页）</h4>
+                <h4>页面目的</h4>
                 <ul>
-                    <li><b>统计口径</b>：本图表<b>仅统计盈利 > 0 的交易对</b>，通过交易配对算法计算每笔买卖配对后扣除手续费的净利润 (absolute_profit)。</li>
-                    <li><b>重要说明</b>：总盈利额为所有盈利交易对的累计金额，<b>不包含亏损交易</b>。实际净盈利需扣除亏损交易后约为该金额的 40-50%。</li>
-                    <li><b>分析意义</b>：对比同分类方法下"成交额占比"与"盈利占比"，观察是否"投得多=赚得多"。如部分分类盈利接近0或占比偏低，说明投入未带来正收益，需进一步优化标的筛选或执行策略。</li>
+                    <li>量化正收益交易对在各分类下的贡献，定位主要盈利来源。</li>
+                    <li>与成交额占比并排展示，检验资金配置效率与偏好是否匹配盈利能力。</li>
                 </ul>
+                <h4>实现方式</h4>
+                <ol>
+                    <li>按 <code>Code</code> 采用 FIFO 将 <code>direction</code> 为 <code>B/S</code> 的订单配对，单笔净利润 = 卖出 <code>tradeAmount</code> − 买入 <code>tradeAmount</code> − 买卖两端 <code>fee</code>。</li>
+                    <li>仅保留净利润大于0的配对，按 <code>Code</code> 汇总为标的盈利额。</li>
+                    <li>使用与成交额相同的分类映射求和占比并绘制饼图；总盈利额不含亏损配对，需结合成交额占比理解整体净效应。</li>
+                </ol>
                 """
 
                 # 合并为一页：上方显示成交额占比，下方显示盈利额占比；在新窗口宽屏下并排显示
@@ -4559,7 +4498,7 @@ class LightweightAnalysis:
         self._save_figure_with_details(
             fig,
             name='factor_exposure_light',
-            title='策略因子特征暴露度（轻量化）',
+            title='策略因子特征暴露度',
             explanation_html=explanation_final,
             metrics=metrics
         )
@@ -4840,7 +4779,7 @@ class LightweightAnalysis:
         self._save_figure_with_details(
             fig,
             name='factor_exposure_light',
-            title='策略因子特征暴露度（轻量化）',
+            title='策略因子特征暴露度',
             explanation_html=''.join(explanation_parts),
             metrics=metrics
         )
@@ -4977,7 +4916,7 @@ class LightweightAnalysis:
         self._save_figure_with_details(
             fig,
             name='factor_direction_exposure_light',
-            title='新增仓位多空方向分解（轻量化）',
+            title='新增仓位多空方向分解',
             explanation_html=''.join(explanation_parts),
             metrics=metrics
         )
@@ -5149,7 +5088,7 @@ class LightweightAnalysis:
         self._save_figure_with_details(
             fig,
             name='factor_holdings_exposure_light',
-            title='持仓因子特征暴露（轻量化）',
+            title='持仓因子特征暴露',
             explanation_html=explanation_html,
             metrics=metrics
         )
@@ -5244,7 +5183,7 @@ class LightweightAnalysis:
             self._save_figure_with_details(
                 fig_time_slip,
                 name='time_slippage_light',
-                title='时间滑点分析（轻量化）',
+                title='时间滑点分析',
                 explanation_html="<p>时间滑点表示从下单到成交的时间延迟，反映市场流动性和执行效率。</p>",
                 metrics={
                     '平均时间滑点': f"{daily_slippage['time_slippage_mean'].mean():.2f}秒",
@@ -5280,7 +5219,7 @@ class LightweightAnalysis:
             self._save_figure_with_details(
                 fig_price_slip,
                 name='price_slippage_light',
-                title='价格滑点分析（轻量化）',
+                title='价格滑点分析',
                 explanation_html="<p>价格滑点表示实际成交价格与订单价格的差异，正值表示买入时价格上升或卖出时价格下降。</p>",
                 metrics={
                     '平均价格滑点': f"{daily_slippage['price_slippage_pct_mean'].mean():.4f}%",
@@ -5322,7 +5261,7 @@ class LightweightAnalysis:
             self._save_figure_with_details(
                 fig_total_cost,
                 name='total_cost_light',
-                title='综合交易成本分析（轻量化）',
+                title='综合交易成本分析',
                 explanation_html="<p>综合交易成本包括价格滑点和手续费，反映实际交易的总成本负担。</p>",
                 metrics={
                     '平均综合成本': f"{daily_slippage['total_cost_pct'].mean():.4f}%",
@@ -5417,7 +5356,11 @@ class LightweightAnalysis:
             min_profit = profit_series.min()
             win_rate = (profit_series > 0).mean()
 
-            # 可视化：柱状图（正红负绿 - A股标准）
+            # 保存原始NAV/现金用于一致性校验
+            mtm_df['total_assets_reported'] = mtm_df['total_assets'].apply(parse_currency)
+            mtm_df['cash_reported'] = mtm_df['cash'].apply(parse_currency)
+
+            # 可视化：柱状图（正红负绿 - A股标准）+ 7日均线
             x_dates = [d.strftime('%Y-%m-%d') for d in profit_series.index]
             y_vals = profit_series.values.tolist()
             colors = ['#e53935' if v >= 0 else '#43a047' for v in y_vals]
@@ -5433,69 +5376,88 @@ class LightweightAnalysis:
 
             # 7日移动平均 - 使用同一Y轴确保可见性
             ma7 = profit_series.rolling(window=min(7, len(profit_series)), min_periods=1).mean()
-            
-            # 确保数据类型正确并转换为列表
             ma7_values = [float(v) for v in ma7.values]
-            
             fig_abs.add_trace(go.Scatter(
                 x=[d.strftime('%Y-%m-%d') for d in ma7.index],
                 y=ma7_values,
                 mode='lines',
                 name='7日均线',
-                line=dict(color='orange', width=4),
+                line=dict(color='#f59e0b', width=2.5),
                 hovertemplate='日期: %{x}<br>7日均线: ¥%{y:,.0f}<extra></extra>'
             ))
 
-            # 标注最大/最小盈利日 - 简化版本避免错误
+            # 标注最大/最小盈利日 - 垂直线
             try:
                 max_day = profit_series.idxmax()
                 min_day = profit_series.idxmin()
                 max_day_str = max_day.strftime('%Y-%m-%d')
                 min_day_str = min_day.strftime('%Y-%m-%d')
-                
-                # 使用更简单的垂直线标注，避免复杂的annotation
                 fig_abs.add_vline(
-                    x=max_day_str, 
-                    line_dash='dash', 
+                    x=max_day_str,
+                    line_dash='dash',
                     line_color='#e53935',
-                    line_width=2,
-                    opacity=0.7
+                    line_width=1,
+                    opacity=0.35
                 )
                 fig_abs.add_vline(
-                    x=min_day_str, 
-                    line_dash='dash', 
+                    x=min_day_str,
+                    line_dash='dash',
                     line_color='#43a047',
-                    line_width=2,
-                    opacity=0.7
+                    line_width=1,
+                    opacity=0.35
                 )
-                
                 print(f"   最大盈利日: {max_day_str} (¥{max_profit:,.0f})")
                 print(f"   最大亏损日: {min_day_str} (¥{min_profit:,.0f})")
-                
             except Exception as e:
                 print(f"   <i class='fas fa-exclamation-triangle text-yellow-500'></i> 添加盈利标注线失败: {e}")
-                # 继续执行，不中断整个分析
 
             fig_abs.update_layout(
-                title=f'日度绝对盈利（盯市NAV差额）<br><sub>合计: ¥{total_profit:,.0f} | 平均: ¥{avg_profit:,.0f} | 盈利日占比: {win_rate:.1%}</sub>',
-                xaxis_title='日期',
-                yaxis_title='金额（¥）',
-                yaxis=dict(
-                    tickformat=',.0f',
-                    exponentformat='none'
+                title=dict(text='日度绝对盈利趋势图', x=0, font=dict(size=18)),
+                xaxis=dict(
+                    title='日期',
+                    type='date',
+                    rangeselector=dict(
+                        buttons=list([
+                            dict(count=1, label="1月", step="month", stepmode="backward"),
+                            dict(count=3, label="3月", step="month", stepmode="backward"),
+                            dict(step="all", label="全部")
+                        ]),
+                        bgcolor='rgba(255,255,255,0.9)'
+                    ),
+                    rangeslider=dict(visible=True),
+                    showgrid=False
                 ),
-                height=420,
+                yaxis=dict(
+                    title='金额（¥）',
+                    tickformat=',.0f',
+                    gridcolor='rgba(0,0,0,0.05)',
+                    zeroline=True,
+                    zerolinecolor='rgba(0,0,0,0.15)'
+                ),
+                height=500,
                 hovermode='x unified',
-                xaxis=dict(type='date'),
-                legend=dict(x=0.02, y=0.98)
+                paper_bgcolor='rgba(0,0,0,0)',
+                plot_bgcolor='rgba(0,0,0,0)',
+                legend=dict(orientation='h', yanchor='bottom', y=1.02, xanchor='right', x=1)
             )
 
-            # 现金一致性指标
+            # 现金一致性指标（使用原始盯市数据校验，而非重算后的现金）
+            mtm_df['cash_expected_raw'] = mtm_df['total_assets_reported'] - mtm_df['long_value_num'] + mtm_df['short_value_num']
+            mtm_df['cash_diff_raw'] = mtm_df['cash_reported'] - mtm_df['cash_expected_raw']
+            max_abs_diff_raw = mtm_df['cash_diff_raw'].abs().max()
+            mean_abs_diff_raw = mtm_df['cash_diff_raw'].abs().mean()
+            rel_diff_raw = (mtm_df['cash_diff_raw'].abs() / mtm_df['total_assets_reported'].replace(0, np.nan)).dropna()
+            max_rel_diff_raw = rel_diff_raw.max() if len(rel_diff_raw) else np.nan
+            mean_rel_diff_raw = rel_diff_raw.mean() if len(rel_diff_raw) else np.nan
+
+            def _fmt_or_na(v, fmt):
+                return fmt.format(v) if pd.notna(v) else "N/A"
+
             cash_metrics = {
-                '最大现金偏差(¥)': f"{max_abs_diff:,.2f}",
-                '平均现金偏差(¥)': f"{mean_abs_diff:,.2f}",
-                '最大相对偏差(对总资产)': f"{(max_rel_diff if pd.notna(max_rel_diff) else 0):.6%}",
-                '平均相对偏差(对总资产)': f"{(mean_rel_diff if pd.notna(mean_rel_diff) else 0):.6%}",
+                '最大现金偏差(¥)': _fmt_or_na(max_abs_diff_raw, "{:,.2f}"),
+                '平均现金偏差(¥)': _fmt_or_na(mean_abs_diff_raw, "{:,.2f}"),
+                '最大相对偏差(对总资产)': _fmt_or_na(max_rel_diff_raw, "{:.6%}"),
+                '平均相对偏差(对总资产)': _fmt_or_na(mean_rel_diff_raw, "{:.6%}"),
             }
 
             abs_metrics = {
@@ -5506,29 +5468,174 @@ class LightweightAnalysis:
                 '盈利日占比': f"{win_rate:.1%}"
             }
 
-            explain_html = (
-                "<p><b>计算口径</b>: 以每日总资产(NAV)的变动作为当日绝对盈利：Profit_t = NAV_t - NAV_(t-1)。"
-                "初始资金设置只影响首日，不影响之后每日的绝对盈利。</p>"
-                "<p><b>现金一致性校验</b>: 按会计恒等式 cash = NAV - long_value + short_value 验证每日现金是否一致，"
-                "若偏差显著，说明上游盯市数据可能存在资金/杠杆口径问题。</p>"
-            )
+            # 构建自定义 HTML（遵循页面设计指南）
+            output_path = self.reports_dir / 'daily_absolute_profit_light.html'
+            config = {
+                'responsive': True,
+                'displayModeBar': False,
+                'displaylogo': False
+            }
+            fig_json = json.dumps(fig_abs.to_plotly_json(), ensure_ascii=False)
+            gen_time = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
 
-            # 合并指标输出
-            merged_metrics = {**abs_metrics, **cash_metrics}
-            self._save_figure_with_details(
-                fig_abs,
-                name='daily_absolute_profit_light',
-                title='日度绝对盈利（盯市）',
-                explanation_html=explain_html,
-                metrics=merged_metrics
-            )
+            card_tpl = """
+            <div class="bg-white rounded-xl shadow-sm p-5 border-l-4 {border_cls}">
+                <p class="text-xs font-semibold text-gray-500 uppercase">{label}</p>
+                <h3 class="text-2xl font-bold text-gray-800 mt-1">{value}</h3>
+                <p class="text-sm text-gray-500 mt-1">{desc}</p>
+            </div>
+            """
+            kpi_cards_html = "".join([
+                card_tpl.format(border_cls="border-[#e53935]", label="合计绝对盈利", value=abs_metrics['合计绝对盈利'], desc="累计NAV差额"),
+                card_tpl.format(border_cls="border-[#e53935]", label="最大单日盈利", value=abs_metrics['最大单日盈利'], desc="最佳单日表现"),
+                card_tpl.format(border_cls="border-[#43a047]", label="最大单日亏损", value=abs_metrics['最大单日亏损'], desc="最差单日表现"),
+                card_tpl.format(border_cls="border-indigo-500", label="盈利日占比", value=abs_metrics['盈利日占比'], desc="(>0) 日占比"),
+            ])
 
+            cash_html = f"""
+            <div class="space-y-2 text-sm text-gray-700">
+                <p class="font-semibold text-gray-900"><i class='fas fa-balance-scale text-indigo-500 mr-1'></i>现金一致性校验</p>
+                <p>最大现金偏差: {cash_metrics['最大现金偏差(¥)']}</p>
+                <p>平均现金偏差: {cash_metrics['平均现金偏差(¥)']}</p>
+                <p>最大相对偏差: {cash_metrics['最大相对偏差(对总资产)']}</p>
+                <p>平均相对偏差: {cash_metrics['平均相对偏差(对总资产)']}</p>
+                <p class="text-xs text-gray-500">校验公式: cash = NAV - long_value + short_value</p>
+            </div>
+            """
+
+            explain_html = """
+            <div class="space-y-2 text-sm text-gray-700 leading-relaxed">
+                <p><b>计算口径</b>：Profit_t = NAV_t - NAV_{t-1}（首日设为 NaN）；初始资金只影响首日，不改变日度绝对盈利。</p>
+                <p><b>均线与标注</b>：7日均线平滑波动；虚线标记最大盈利日与最大亏损日。</p>
+                <p><b>交互</b>：使用上方范围选择器查看近 1/3 个月，或拖动底部 Range Slider 浏览全区间。</p>
+                <p class="text-xs text-gray-500">若盯市数据口径调整，请重新生成本页面以确保一致性。</p>
+            </div>
+            """
+
+            html = f"""
+            <!DOCTYPE html>
+            <html lang="zh-CN">
+            <head>
+                <meta charset="utf-8">
+                <meta name="viewport" content="width=device-width, initial-scale=1">
+                <title>日度绝对盈利（盯市）</title>
+                <script src="https://cdn.tailwindcss.com"></script>
+                <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+                <script src="https://cdn.plot.ly/plotly-latest.min.js"></script>
+                <style>
+                    body {{ font-family: "Inter", "Microsoft YaHei", sans-serif; }}
+                </style>
+            </head>
+            <body class="bg-gray-50 min-h-screen p-6">
+                <div class="max-w-7xl mx-auto space-y-6">
+                    <div class="flex items-center justify-between">
+                        <h1 class="text-2xl font-bold text-gray-900">
+                            <i class="fas fa-money-bill-wave text-green-600 mr-2"></i>日度绝对盈利（盯市）
+                        </h1>
+                        <div class="text-sm text-gray-500"><i class='far fa-clock mr-1'></i>生成时间: {gen_time}</div>
+                    </div>
+
+                    <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+                        {kpi_cards_html}
+                    </div>
+
+                    <div id="main_chart_wrap" class="bg-white rounded-xl shadow-sm p-4 border border-gray-100">
+                        <div id="main_chart" class="w-full h-[500px]"></div>
+                    </div>
+
+                    <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                        <div class="bg-white rounded-xl shadow-sm p-6 border-l-4 border-indigo-400">
+                            {cash_html}
+                        </div>
+                        <div class="lg:col-span-2 bg-white rounded-xl shadow-sm p-6">
+                            {explain_html}
+                        </div>
+                    </div>
+                </div>
+
+                <script>
+                    (function() {{
+                        var fig = {fig_json};
+                        var config = {json.dumps(config, ensure_ascii=False)};
+                        Plotly.newPlot('main_chart', fig.data, fig.layout, config);
+                        var wrap = document.getElementById('main_chart_wrap');
+                        if (wrap) {{
+                            var scrollToMain = function() {{
+                                try {{
+                                    var rect = wrap.getBoundingClientRect();
+                                    var targetTop = rect.top + window.pageYOffset - 16;
+                                    window.scrollTo({{ top: targetTop, behavior: 'auto' }});
+                                }} catch (e) {{}}
+                            }};
+                            if (document.readyState === 'complete') {{
+                                scrollToMain();
+                            }} else {{
+                                window.addEventListener('load', scrollToMain, {{ once: true }});
+                            }}
+                        }}
+                    }})();
+                </script>
+            </body>
+            </html>
+            """
+            output_path.write_text(html, encoding='utf-8')
+            self.figures.append(('daily_absolute_profit_light', str(output_path)))
             print("<i class='fas fa-check-circle text-green-500'></i> 日度绝对盈利图已生成")
         except Exception as e:
             print(f"<i class='fas fa-times-circle text-red-500'></i> 绝对盈利分析失败: {e}")
 
+    def _ensure_strategy_metrics_from_nav(self) -> bool:
+        """兜底：直接从 daily_nav_revised.csv 计算策略总收益/夏普/回撤/胜率，修复仪表板 N/A。"""
+        try:
+            mtm_file = Path("mtm_analysis_results/daily_nav_revised.csv")
+            if not mtm_file.exists():
+                return False
+            nav = pd.read_csv(mtm_file)
+            if 'total_assets' not in nav.columns:
+                return False
+
+            def _parse_cur(v):
+                try:
+                    if isinstance(v, (int, float)):
+                        return float(v)
+                    if isinstance(v, str):
+                        return float(v.replace(',', '').strip())
+                except Exception:
+                    return np.nan
+                return np.nan
+
+            nav['date'] = pd.to_datetime(nav['date'])
+            nav = nav.sort_values('date').copy()
+            nav['total_assets_num'] = nav['total_assets'].apply(_parse_cur)
+            nav['daily_return_nav'] = nav['total_assets_num'].pct_change()
+            if len(nav) == 0:
+                return False
+            nav.loc[nav.index[0], 'daily_return_nav'] = 0.0
+            dr = nav['daily_return_nav'].astype(float)
+            cum = (1 + dr).cumprod()
+            CORRECT_INITIAL_CAPITAL = 62_090_808
+            total_return = float(nav['total_assets_num'].iloc[-1] / CORRECT_INITIAL_CAPITAL - 1) if len(nav) > 0 else np.nan
+            vol = float(np.nanstd(dr, ddof=1))
+            sharpe = float(np.nan) if vol == 0 or np.isnan(vol) else float(np.nanmean(dr) / vol * np.sqrt(252))
+            rolling_max = cum.expanding().max()
+            max_dd = float(((cum - rolling_max) / rolling_max).min())
+            win_rate = float((dr > 0).mean())
+
+            if not hasattr(self, 'strategy_metrics') or not isinstance(self.strategy_metrics, dict):
+                self.strategy_metrics = {}
+            self.strategy_metrics.update({
+                'total_return_nav': f"{total_return*100:.2f}%" if not np.isnan(total_return) else "N/A",
+                'sharpe_ratio': f"{sharpe:.3f}" if not np.isnan(sharpe) else "N/A",
+                'max_drawdown': f"{max_dd:.2%}" if not np.isnan(max_dd) else "N/A",
+                'win_rate': f"{win_rate:.2%}" if not np.isnan(win_rate) else "N/A",
+            })
+            return True
+        except Exception as e:
+            print(f"<i class='fas fa-exclamation-triangle text-yellow-500'></i> NAV兜底计算指标失败: {e}")
+            return False
+
     def performance_metrics_analysis(self):
-        """轻量级绩效指标分析 - 实现股票-日聚合的真实策略收益"""
+        """绩效指标分析 - 实现股票-日聚合的真实策略收益"""
         print("\n<i class='fas fa-chart-bar text-indigo-500'></i> === 绩效指标分析（真实策略收益口径）===")
         
         # 1. 股票-日聚合，避免多订单重复计权
@@ -5918,25 +6025,19 @@ class LightweightAnalysis:
             )
             
             comparison_explanation = """
-<p><b>计算链路（聚焦下单质量）：</b></p>
+<h4>页面目的</h4>
+<ul>
+    <li>用三种日收益率口径评估下单质量，区分信号排序、资金分配与现金效率。</li>
+    <li>提供买入日/平仓日两种归因方式，观察收益对执行时点的敏感度。</li>
+</ul>
+<h4>实现方式</h4>
 <ol>
-    <li><b>配对收益率</b>：先构建买卖配对并计算 单笔收益率 = 配对绝对收益 ÷ 开仓时 <code>tradeAmount</code>，反映单笔下单的盈亏效率。</li>
-    <li><b>按交易日聚合</b>：将有效配对按归因日期（平仓日或买入日）聚合，分别得到等权均值与按名义 <code>tradeAmount</code> 加权的日收益。</li>
-    <li><b>现金效率</b>：另行读取盯市总资产变化得到当日盈亏，以当日 <code>direction</code> 为 <code>B</code> 的总 <code>tradeAmount</code> 为分母计算 当日盈亏 ÷ 当日买入总额，衡量单位资金花费产出。</li>
+    <li>对每只 <code>Code</code> 按 <code>Timestamp</code> 先后执行 FIFO 配对：买入(<code>B</code>)与卖出(<code>S</code>)的 <code>tradeQty</code>、<code>tradeAmount</code>、<code>fee</code> 成对，单笔净收益 = 卖出金额 − 买入金额 − 买卖两端 <code>fee</code>，单笔收益率 = 净收益 ÷ 开仓时 <code>tradeAmount</code>。</li>
+    <li>按归因日期聚合：平仓日归因使用卖出日，买入日归因使用买入日；分别计算等权均值与以开仓 <code>tradeAmount</code> 为权重的加权均值。</li>
+    <li><b>PnL(花出的钱)</b>：当日盯市盈亏 ÷ 当日买入方向的 <code>tradeAmount</code> 之和（仅分母>0时计算），体现单位现金投放的真实产出。</li>
+    <li>曲线超过200个交易日会按时间抽样展示，避免加载过重，所有统计均基于全量数据。</li>
 </ol>
-<p><b>三种收益曲线的含义：</b></p>
-<ul>
-    <li><b>等权收益</b>：每日所有配对收益率的等权平均，突出选股与下单方向的纯技术表现。</li>
-    <li><b>金额加权</b>：按开仓时 <code>tradeAmount</code> 加权，体现资金配置是否把更多资金投向更高收益的交易。</li>
-    <li><b>PnL(花出的钱)</b>：<b>当日盯市盈亏 ÷ 当日买入总额</b>，是真实现金视角的单位投入回报；当日无买入则不定义。</li>
-</ul>
-<h4><i class='fas fa-bullseye text-red-500'></i> PnL(花出的钱)方法说明</h4>
-<ul>
-    <li><b>真实现金口径</b>：仅统计 <code>direction</code> 为 <code>B</code> 的 <code>tradeAmount</code> 现金流出作为分母；卖出视作回笼资金。</li>
-    <li><b>多空一致</b>：盯市总资产变化捕捉做多与做空收益，统一放在同一口径。</li>
-    <li><b>稳健性</b>：为避免分母为0导致失真，当日无买入时直接跳过该口径。</li>
-</ul>
-<p>这些收益率均未按总资产或授信本金归一，而是专注于评估下单质量与资金投放效率；若需固定本金视角，请参阅"日收益率曲线（以首日总资产为本金）"。</p>
+<div style="margin-top:8px;">解读建议：若金额加权明显低于等权，说明大额交易执行质量不足；PnL(花出的钱)若弱于配对收益，通常由持有期波动或未平仓头寸拖累。</div>
 """
             
             # 添加按钮用于切换归因方式
@@ -6435,7 +6536,7 @@ class LightweightAnalysis:
             
 
             
-            # 3. 绝对收益分布（盯市） - 轻量化
+            # 3. 绝对收益分布（盯市）
             daily_abs_profit = pd.Series(dtype=float)
             try:
                 from pathlib import Path
@@ -6586,7 +6687,7 @@ class LightweightAnalysis:
             self._save_figure_with_details(
                 fig_dist,
                 name='returns_distribution_light',
-                title='日绝对收益分布（盯市，轻量化）',
+                title='日绝对收益分布（盯市）',
                 explanation_html="<p>展示日绝对收益（盯市）分布形态，定位极端值与偏态风险。</p>",
                 metrics=perf_metrics,
             )
@@ -6709,7 +6810,7 @@ class LightweightAnalysis:
                 _profit_cover = _profit_cover.sort_index()
                 _profit_cover = _profit_cover.reindex(_daily_holding.index)
                 if len(_daily_holding) > 0:
-                    # 采样以保证轻量
+                    # 采样以控制页面体积
                     _series = _daily_holding
                     if len(_series) > 200:
                         _step = max(1, len(_series)//150)
@@ -6862,7 +6963,7 @@ class LightweightAnalysis:
             self._save_figure_with_details(
                 fig_fill,
                 name='fill_rate_timeseries_light',
-                title='成交率时间序列（轻量化）',
+                title='成交率时间序列',
                 explanation_html=fill_explain,
                 metrics=fill_metrics,
             )
@@ -6907,7 +7008,7 @@ class LightweightAnalysis:
             self._save_figure_with_details(
                 fig_fill_dist,
                 name='fill_rate_distribution_light',
-                title='成交率分布（轻量化）',
+                title='成交率分布',
                 explanation_html="<p>展示所有订单的逐笔成交率分布，用于识别长尾与极端未成交情况。</p>",
                 metrics=fill_dist_metrics
             )
@@ -7245,7 +7346,7 @@ class LightweightAnalysis:
             drawdown = (cumulative_nav - rolling_max) / rolling_max
             max_drawdown = drawdown.min()
             metrics['最大回撤'] = f"{max_drawdown:.2%}"
-            
+        
         except Exception as e:
             print(f"<i class='fas fa-exclamation-triangle text-yellow-500'></i> 计算策略指标时出错: {e}")
             metrics['策略胜率'] = "计算错误"
@@ -7270,6 +7371,19 @@ class LightweightAnalysis:
         best_return = best_benchmark[1]['cumulative_return'].iloc[-1] * 100
         
         metrics['最佳基准'] = f"{best_name} ({best_return:.2f}%)"
+
+        # 同步策略指标到 dashboard，确保总收益率以基准对比口径为准
+        try:
+            if not hasattr(self, 'strategy_metrics') or not isinstance(self.strategy_metrics, dict):
+                self.strategy_metrics = {}
+            self.strategy_metrics.update({
+                'total_return_nav': metrics.get('策略总收益', 'N/A'),
+                'sharpe_ratio': metrics.get('夏普比率', 'N/A'),
+                'max_drawdown': metrics.get('最大回撤', 'N/A'),
+                'win_rate': metrics.get('策略胜率', 'N/A'),
+            })
+        except Exception:
+            pass
         
         return metrics
         
@@ -7466,7 +7580,7 @@ class LightweightAnalysis:
 
     def _render_slot_performance_outputs(self, payload: dict, cache_hit: bool = False) -> None:
         """渲染最小集的时段分析图表：
-        1) 全样本期日内时段绝对收益条形图（替代瀑布图，轻量化）
+        1) 全样本期日内时段绝对收益条形图（替代瀑布图）
         2) 星期 × 时段 绝对盈利热力图
         """
         try:
@@ -7522,13 +7636,19 @@ class LightweightAnalysis:
             pivot_df: Optional[pd.DataFrame] = payload.get('weekday_slot_pivot')
             if isinstance(pivot_df, pd.DataFrame) and len(pivot_df) > 0:
                 z = pivot_df.values.astype(float)
+                heat_colorscale = [
+                    [0.0, '#43a047'],  # 亏损/负向
+                    [0.5, '#f5f5f5'],  # 中性
+                    [1.0, '#e53935']   # 盈利/正向
+                ]
                 fig_heat = go.Figure(data=go.Heatmap(
                     z=z,
                     x=pivot_df.columns.astype(str).tolist(),
                     y=pivot_df.index.astype(str).tolist(),
-                    colorscale='RdBu',
-                    reversescale=True,
-                    colorbar=dict(title='绝对收益')
+                    colorscale=heat_colorscale,
+                    zmid=0,
+                    colorbar=dict(title='绝对收益', tickformat=',.0f'),
+                    hovertemplate='星期 %{y}<br>时段 %{x}<br>绝对收益 ¥%{z:,.0f}<extra></extra>'
                 ))
                 fig_heat.update_layout(
                     title='星期×时段绝对盈利热力图',
@@ -7540,7 +7660,7 @@ class LightweightAnalysis:
                     fig_heat,
                     name='time_slot_profit_heatmap_light',
                     title='星期×时段绝对盈利热力图',
-                    explanation_html='<p>跨全样本聚合每个 5 分钟时段在不同星期的绝对盈利，展示结构性差异。</p>',
+                    explanation_html='- 以卖出时刻所在的 5 分钟时段为颗粒，按星期聚合绝对盈利，刻画结构性高频节奏。\n- 颜色遵循 A 股语义：红=盈利，绿=亏损，中心灰=中性。',
                     metrics={}
                 )
 
@@ -7549,17 +7669,32 @@ class LightweightAnalysis:
             if 'avg_return' in slot_sum_indexed.columns:
                 y_ret = slot_sum_indexed['avg_return'].astype(float).fillna(0.0).tolist()
                 fig_avg = go.Figure()
-                fig_avg.add_trace(go.Bar(x=x_vals, y=y_ret, marker_color='#3498db', name='平均净收益率'))
+                colors_avg = ['#e53935' if v >= 0 else '#43a047' for v in y_ret]
+                fig_avg.add_trace(go.Bar(
+                    x=x_vals,
+                    y=y_ret,
+                    marker_color=colors_avg,
+                    name='平均净收益率',
+                    text=[f"{v*100:.2f}%" for v in y_ret],
+                    textposition='outside',
+                    hovertemplate='时段 %{x}<br>平均净收益率 %{y:.2%}<extra></extra>'
+                ))
                 try:
                     fig_avg.add_hline(y=0, line_dash='dot', line_color='gray')
                 except Exception:
                     pass
-                fig_avg.update_layout(title='时段平均净收益率分析', xaxis_title='时段(5分钟)', yaxis_title='平均净收益率', height=420)
+                fig_avg.update_layout(
+                    title='时段平均净收益率分析',
+                    xaxis_title='时段(5分钟)',
+                    yaxis_title='平均净收益率',
+                    height=420
+                )
+                fig_avg.update_yaxes(tickformat='.2%')
                 self._save_figure_with_details(
                     fig_avg,
                     name='time_slot_performance_analysis_light',
                     title='时段平均净收益率分析',
-                    explanation_html='<p>按每笔闭环交易的收益率（绝对盈利/买入额）在对应 5 分钟时段取均值，衡量净效应。</p>',
+                    explanation_html='- 将每笔闭环交易的收益率（绝对盈利÷买入金额）按卖出时刻所在的 5 分钟时段求均值。\n- 仅覆盖 09:30-11:30 与 13:00-15:00 的交易时段，用于识别高低效时段。',
                     metrics={}
                 )
 
@@ -7578,18 +7713,38 @@ class LightweightAnalysis:
                         t_val = np.nan
                     t_values.append(t_val)
                 fig_t = go.Figure()
-                fig_t.add_trace(go.Bar(x=ordered_slots, y=[0 if pd.isna(v) else v for v in t_values], marker_color='#8e44ad', name='t统计'))
+                t_plot = [0 if pd.isna(v) else v for v in t_values]
+                colors_t = []
+                for v in t_plot:
+                    if pd.isna(v):
+                        colors_t.append('#9ca3af')
+                    else:
+                        colors_t.append('#e53935' if v >= 0 else '#43a047')
+                fig_t.add_trace(go.Bar(
+                    x=ordered_slots,
+                    y=t_plot,
+                    marker_color=colors_t,
+                    name='t统计',
+                    text=[f"{v:.2f}" if not pd.isna(v) else "" for v in t_values],
+                    textposition='outside',
+                    hovertemplate='时段 %{x}<br>t 统计 %{y:.2f}<extra></extra>'
+                ))
                 try:
-                    fig_t.add_hline(y=1.96, line_dash='dot', line_color='tomato')
-                    fig_t.add_hline(y=-1.96, line_dash='dot', line_color='tomato')
+                    fig_t.add_hline(y=1.96, line_dash='dot', line_color='rgba(229,57,53,0.7)')
+                    fig_t.add_hline(y=-1.96, line_dash='dot', line_color='rgba(229,57,53,0.7)')
                 except Exception:
                     pass
-                fig_t.update_layout(title='时段收益显著性检验（t统计）', xaxis_title='时段(5分钟)', yaxis_title='t 值', height=420)
+                fig_t.update_layout(
+                    title='时段收益显著性检验（t统计）',
+                    xaxis_title='时段(5分钟)',
+                    yaxis_title='t 值',
+                    height=420
+                )
                 self._save_figure_with_details(
                     fig_t,
                     name='time_slot_significance_test_light',
                     title='时段收益显著性检验',
-                    explanation_html='<p>每个 5 分钟时段按收益率计算 t 值；虚线为 |t|=1.96 阈值（约 5% 显著）。</p>',
+                    explanation_html='- 对每个 5 分钟时段的收益率做单样本 t 检验，判断均值是否显著偏离 0。\n- 虚线 |t|=1.96 为约 5% 的双侧显著阈值，红色为正向显著、绿色为负向显著。',
                     metrics={}
                 )
 
@@ -7599,35 +7754,76 @@ class LightweightAnalysis:
                 ar = payload.get('agg_short')
                 fig_decomp = go.Figure()
                 if al is not None:
-                    fig_decomp.add_trace(go.Bar(x=ordered_slots, y=[float(v) if pd.notna(v) else 0.0 for v in al.tolist()], name='多头', marker_color='#27ae60'))
+                    long_vals = [float(v) if pd.notna(v) else 0.0 for v in al.tolist()]
+                    colors_long = ['#e53935' if v >= 0 else '#43a047' for v in long_vals]
+                    fig_decomp.add_trace(go.Bar(
+                        x=ordered_slots,
+                        y=long_vals,
+                        name='多头',
+                        marker=dict(color=colors_long),
+                        text=[f"{v:,.0f}" for v in long_vals],
+                        textposition='outside',
+                        hovertemplate='时段 %{x}<br>多头绝对收益 ¥%{y:,.0f}<extra></extra>'
+                    ))
                 if ar is not None:
-                    fig_decomp.add_trace(go.Bar(x=ordered_slots, y=[float(v) if pd.notna(v) else 0.0 for v in ar.tolist()], name='空头', marker_color='#c0392b'))
-                fig_decomp.update_layout(barmode='relative', title='时段绝对收益分解（多/空）', xaxis_title='时段(5分钟)', yaxis_title='累计绝对收益', height=420)
+                    short_vals = [float(v) if pd.notna(v) else 0.0 for v in ar.tolist()]
+                    colors_short = ['#e53935' if v >= 0 else '#43a047' for v in short_vals]
+                    fig_decomp.add_trace(go.Bar(
+                        x=ordered_slots,
+                        y=short_vals,
+                        name='空头',
+                        marker=dict(color=colors_short, line=dict(width=0.4, color='#111827')),
+                        text=[f"{v:,.0f}" for v in short_vals],
+                        textposition='outside',
+                        hovertemplate='时段 %{x}<br>空头绝对收益 ¥%{y:,.0f}<extra></extra>'
+                    ))
+                fig_decomp.update_layout(
+                    barmode='relative',
+                    title='时段绝对收益分解（多/空）',
+                    xaxis_title='时段(5分钟)',
+                    yaxis_title='累计绝对收益',
+                    height=420,
+                    legend_title_text='方向'
+                )
                 self._save_figure_with_details(
                     fig_decomp,
                     name='time_slot_profit_decomposition_light',
                     title='时段绝对收益分解',
-                    explanation_html='<p>按多/空头将绝对收益在各 5 分钟时段分解，观察方向性贡献。</p>',
+                    explanation_html='- 将绝对盈利按卖出时刻所在的 5 分钟时段、并按多/空方向拆分后累加。\n- 红色柱表示盈利贡献，绿色表示亏损贡献，便于定位方向性优势时段。',
                     metrics={}
                 )
 
             # 4) 时段收益分布箱线图（每时段最多采样 400 笔）
             if isinstance(slot_ret_df, pd.DataFrame) and len(slot_ret_df) > 0:
                 fig_box = go.Figure()
-                rng = np.random.default_rng(12345)
                 for s in ordered_slots:
                     r = slot_ret_df.loc[slot_ret_df['slot'] == s, 'return'].astype(float)
                     if len(r) == 0:
                         continue
                     if len(r) > 400:
                         r = r.sample(400, random_state=12345)
-                    fig_box.add_trace(go.Box(y=r.values.tolist(), name=s, boxpoints=False, marker_color='#34495e'))
-                fig_box.update_layout(title='时段收益分布箱线图（采样）', xaxis_title='时段(5分钟)', yaxis_title='收益率', height=480, showlegend=False)
+                    median_v = float(np.nanmedian(r.values)) if len(r) > 0 else 0.0
+                    color_box = '#e53935' if median_v >= 0 else '#43a047'
+                    fig_box.add_trace(go.Box(
+                        y=r.values.tolist(),
+                        name=s,
+                        boxpoints=False,
+                        marker_color=color_box,
+                        hovertemplate='时段 %{name}<br>收益率=%{y:.2%}<extra></extra>'
+                    ))
+                fig_box.update_layout(
+                    title='时段收益分布箱线图（采样）',
+                    xaxis_title='时段(5分钟)',
+                    yaxis_title='收益率',
+                    height=480,
+                    showlegend=False
+                )
+                fig_box.update_yaxes(tickformat='.2%')
                 self._save_figure_with_details(
                     fig_box,
                     name='time_slot_returns_boxplot_light',
                     title='时段收益分布箱线图',
-                    explanation_html='<p>为控制体积，对每个时段最多采样 400 笔交易绘制箱线图。</p>',
+                    explanation_html='- 每个时段最多采样 400 笔交易绘制箱线图，控制页面体积。\n- 箱体颜色跟随中位数：红=正收益，绿=负收益。',
                     metrics={}
                 )
 
@@ -7637,17 +7833,39 @@ class LightweightAnalysis:
                 sd = slot_sum_indexed['std_return'].astype(float).fillna(0.0)
                 n = slot_sum_indexed['trade_count'].astype(float).fillna(0.0)
                 fig_bub = go.Figure()
+                max_abs_mu = float(np.nanmax(np.abs(mu))) if len(mu) > 0 else 0.0
+                max_abs_mu = max(max_abs_mu, 1e-6)
                 fig_bub.add_trace(go.Scatter(
-                    x=sd.tolist(), y=mu.tolist(), mode='markers+text',
-                    text=[s for s in ordered_slots], textposition='top center',
-                    marker=dict(size=(np.sqrt(n)/np.sqrt(max(n.max(),1))) * 40 + 5, color=mu.tolist(), colorscale='RdBu', showscale=True)
+                    x=sd.tolist(),
+                    y=mu.tolist(),
+                    mode='markers+text',
+                    text=[s for s in ordered_slots],
+                    textposition='top center',
+                    customdata=n.tolist(),
+                    marker=dict(
+                        size=(np.sqrt(n) / np.sqrt(max(n.max(), 1))) * 40 + 5,
+                        color=mu.tolist(),
+                        colorscale=[[0, '#43a047'], [0.5, '#f5f5f5'], [1, '#e53935']],
+                        cmin=-max_abs_mu,
+                        cmax=max_abs_mu,
+                        colorbar=dict(title='平均收益率', tickformat='.2%'),
+                        line=dict(width=0.6, color='#111827')
+                    ),
+                    hovertemplate='时段 %{text}<br>均值 %{y:.2%}<br>标准差 %{x:.2%}<br>样本数 %{customdata:.0f}<extra></extra>'
                 ))
-                fig_bub.update_layout(title='时段风险-收益气泡图', xaxis_title='收益率标准差', yaxis_title='平均收益率', height=480)
+                fig_bub.update_layout(
+                    title='时段风险-收益气泡图',
+                    xaxis_title='收益率标准差',
+                    yaxis_title='平均收益率',
+                    height=480
+                )
+                fig_bub.update_yaxes(tickformat='.2%')
+                fig_bub.update_xaxes(tickformat='.2%')
                 self._save_figure_with_details(
                     fig_bub,
                     name='time_slot_risk_return_bubble_light',
                     title='时段风险-收益气泡图',
-                    explanation_html='<p>每个时段的收益率均值与标准差，气泡大小代表样本数。</p>',
+                    explanation_html='- 横轴为收益率标准差，纵轴为平均收益率，气泡面积与样本数成比例。\n- 颜色遵循红盈绿亏语义，并以 0 为中心对称映射。',
                     metrics={}
                 )
 
@@ -7657,15 +7875,33 @@ class LightweightAnalysis:
                 close_slots = ordered_slots[-6:]  # 14:30-15:00
                 mu_open = slot_sum_indexed.set_index(pd.Index(ordered_slots)).loc[open_slots, 'avg_return'].astype(float).fillna(0.0)
                 mu_close = slot_sum_indexed.set_index(pd.Index(ordered_slots)).loc[close_slots, 'avg_return'].astype(float).fillna(0.0)
-                fig_open = go.Figure(go.Bar(x=open_slots, y=mu_open.tolist(), marker_color='#2c3e50'))
+                colors_open = ['#e53935' if v >= 0 else '#43a047' for v in mu_open.tolist()]
+                colors_close = ['#e53935' if v >= 0 else '#43a047' for v in mu_close.tolist()]
+                fig_open = go.Figure(go.Bar(
+                    x=open_slots,
+                    y=mu_open.tolist(),
+                    marker_color=colors_open,
+                    text=[f"{v*100:.2f}%" for v in mu_open.tolist()],
+                    textposition='outside',
+                    hovertemplate='时段 %{x}<br>平均净收益率 %{y:.2%}<extra></extra>'
+                ))
                 fig_open.update_layout(title='开盘前 30 分钟：平均净收益率', height=420)
-                fig_close = go.Figure(go.Bar(x=close_slots, y=mu_close.tolist(), marker_color='#16a085'))
+                fig_open.update_yaxes(tickformat='.2%')
+                fig_close = go.Figure(go.Bar(
+                    x=close_slots,
+                    y=mu_close.tolist(),
+                    marker_color=colors_close,
+                    text=[f"{v*100:.2f}%" for v in mu_close.tolist()],
+                    textposition='outside',
+                    hovertemplate='时段 %{x}<br>平均净收益率 %{y:.2%}<extra></extra>'
+                ))
                 fig_close.update_layout(title='尾盘后 30 分钟：平均净收益率', height=420)
+                fig_close.update_yaxes(tickformat='.2%')
                 self._save_figure_pair_with_details(
                     fig_open, fig_close,
                     name='time_slot_opening_closing_analysis_light',
                     title='开盘与尾盘精细分析（5分钟）',
-                    explanation_html='<p>对开盘与尾盘各 30 分钟的时段进行比较，观察边界时段的收益结构。</p>',
+                    explanation_html='- 将开盘与尾盘各 30 分钟的 5 分钟时段均值并列展示，识别边界时段的稳定性差异。\n- 红色为盈利，中性或亏损用绿色标示，便于快速对比。',
                     metrics_primary={}, metrics_secondary={},
                     primary_title='开盘 30 分钟', secondary_title='尾盘 30 分钟'
                 )
@@ -7927,8 +8163,26 @@ class LightweightAnalysis:
             import traceback
             traceback.print_exc()
 
+    def _apply_plotly_theme(self, fig: go.Figure, yaxis_percent: bool = False) -> None:
+        """统一 Plotly 主题，符合前端设计规范。"""
+        base_layout = dict(
+            font=dict(family='Noto Sans SC, "Microsoft YaHei", "Segoe UI", sans-serif'),
+            margin=dict(t=30, b=40, l=60, r=20),
+            hovermode='x unified',
+            paper_bgcolor='rgba(0,0,0,0)',
+            plot_bgcolor='rgba(0,0,0,0)',
+            xaxis=dict(showgrid=False, zeroline=False),
+            yaxis=dict(showgrid=True, gridcolor='#e5e7eb', zeroline=True, zerolinecolor='#9ca3af')
+        )
+        try:
+            fig.update_layout(**base_layout)
+            if yaxis_percent:
+                fig.update_yaxes(tickformat='.2%')
+        except Exception:
+            pass
+
     def _save_figure_with_details(self, fig, name: str, title: str, explanation_html: str, metrics: dict, extra_figs: Optional[List[Tuple[str, go.Figure]]] = None):
-        """保存含说明与指标汇总的图表页面（轻量化）"""
+        """保存含说明与指标汇总的图表页面"""
         try:
             output_path = self.reports_dir / f"{name}.html"
 
@@ -8015,12 +8269,21 @@ class LightweightAnalysis:
                 # 降级：不影响后续渲染
                 pass
 
-            # 轻量配置
+            # 展示配置
             config = {
                 'displayModeBar': False,
                 'displaylogo': False,
                 'modeBarButtonsToRemove': ['pan2d', 'lasso2d']
             }
+
+            # 统一主题（含字体、网格与 hover 行为）
+            self._apply_plotly_theme(fig)
+            if extra_figs:
+                for _, ef in extra_figs:
+                    try:
+                        self._apply_plotly_theme(ef)
+                    except Exception:
+                        pass
 
             # 仅生成图表DIV片段，后续嵌入我们的说明模板
             # 为彻底规避 TypedArray(bdata) 在部分环境下解析失败导致的柱状图“单调上升”问题，
@@ -8106,7 +8369,7 @@ class LightweightAnalysis:
                 fig_obj.update_layout({
                     'paper_bgcolor': 'rgba(0,0,0,0)',
                     'plot_bgcolor': 'rgba(0,0,0,0)',
-                    'font': {'family': '"Segoe UI", "Microsoft YaHei", sans-serif'}
+                    'font': {'family': 'Noto Sans SC, "Microsoft YaHei", "Segoe UI", sans-serif'}
                 })
                 fig_json = fig_obj.to_plotly_json()
                 fig_json_native = _to_native(fig_json)
@@ -8121,43 +8384,45 @@ class LightweightAnalysis:
                 for idx, (suffix, extra_fig) in enumerate(extra_figs, start=1):
                     div_suffix = suffix if suffix else f"extra{idx}"
                     div_id = f"{name}_{div_suffix}"
-                    extra_parts.append(f"<div style=\"margin-top:18px;\">{_build_fig_html(extra_fig, div_id)}</div>")
+                    extra_parts.append(f"<div class=\"mt-6\">{_build_fig_html(extra_fig, div_id)}</div>")
                 fig_html += "".join(extra_parts)
 
             # 指标表格HTML
             if metrics:
-                rows = "".join([f"<tr><td>{k}</td><td>{v}</td></tr>" for k, v in metrics.items()])
+                rows = "".join([f"<tr><td class='py-2 px-3 text-gray-600'>{k}</td><td class='py-2 px-3 text-gray-900 font-medium'>{v}</td></tr>" for k, v in metrics.items()])
                 metrics_html = f"""
-                <table style=\"width:100%;border-collapse:collapse;margin:10px 0;\">
-                    <thead>
-                        <tr style=\"background:#f4f6f8;text-align:left;\"><th style=\"padding:8px\">指标</th><th style=\"padding:8px\">数值</th></tr>
-                    </thead>
-                    <tbody>{rows}</tbody>
-                </table>
+                <div class="mt-2 mb-4">
+                    <table class="w-full text-sm border border-gray-100 rounded-md overflow-hidden">
+                        <thead class="bg-gray-50 text-gray-500">
+                            <tr><th class="py-2 px-3 text-left">指标</th><th class="py-2 px-3 text-left">数值</th></tr>
+                        </thead>
+                        <tbody class="divide-y divide-gray-100">{rows}</tbody>
+                    </table>
+                </div>
                 """
             else:
                 metrics_html = ""
 
             # 组合页面 - 图表优先显示
             mathjax_local_src = self._ensure_mathjax_bundle()
+            explanation_md = json.dumps(explanation_html, ensure_ascii=False)
             html = f"""
             <!DOCTYPE html>
             <html>
             <head>
-                <meta charset=\"utf-8\" />
-                <meta name=\"viewport\" content=\"width=device-width, initial-scale=1\" />
+                <meta charset="utf-8" />
+                <meta name="viewport" content="width=device-width, initial-scale=1" />
                 <title>{title}</title>
-                <script src=\"https://cdn.plot.ly/plotly-latest.min.js\"></script>
-                <link rel=\"stylesheet\" href=\"https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css\">
-                <script src=\"https://cdn.tailwindcss.com\"></script>
+                <script src="https://cdn.plot.ly/plotly-latest.min.js"></script>
+                <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+                <script src="https://cdn.tailwindcss.com"></script>
+                <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
                 <style>
-                    body {{ font-family: Arial, sans-serif; margin: 20px; }}
-                    h1 {{ margin: 0 0 15px 0; font-size: 22px; }}
-                    .card {{ background: #fff; padding: 16px; border-radius: 10px; box-shadow: 0 2px 8px rgba(0,0,0,0.06); }}
-                    .chart-container {{ margin-bottom: 20px; }}
-                    .metrics-section {{ margin-top: 15px; }}
-                    .explain {{ margin-top: 14px; color: #444; line-height: 1.7; }}
-                    table td, table th {{ border-bottom: 1px solid #eee; padding: 8px; }}
+                    body {{ font-family: "Noto Sans SC","Microsoft YaHei","Segoe UI",sans-serif; }}
+                    .markdown-body h3 {{ font-size: 1.05rem; margin-top: 1rem; margin-bottom: .45rem; }}
+                    .markdown-body p {{ margin: .35rem 0; color: #374151; line-height: 1.65; }}
+                    .markdown-body ul {{ margin: .25rem 0 .5rem 1.2rem; color: #374151; line-height: 1.6; list-style: disc; }}
+                    .markdown-body li {{ margin: .2rem 0; }}
                 </style>
                 <script>
                     window.MathJax = {{
@@ -8172,55 +8437,51 @@ class LightweightAnalysis:
                 </script>
                 <script id="MathJax-script" async src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-chtml-full.js" onerror="this.onerror=null; this.src='{mathjax_local_src}';"></script>
             </head>
-            <body>
-                <div class=\"card\" id=\"page-root\"> 
-                    <h1>{title}</h1>
-                    <div class=\"chart-container\">
-                        {fig_html}
+            <body class="bg-gray-50">
+                <header class="sticky top-0 z-30 bg-white shadow-sm border-b border-gray-100">
+                    <div class="max-w-7xl mx-auto px-4 sm:px-6 py-3 flex items-center justify-between">
+                        <div>
+                            <p class="text-[11px] tracking-[0.18em] text-gray-500 uppercase">时段分析</p>
+                            <h1 class="text-xl font-semibold text-gray-900">{title}</h1>
+                        </div>
+                        <div class="text-xs text-gray-500">滚动查看完整内容</div>
                     </div>
-                    <div class=\"metrics-section\">
+                </header>
+                <main class="max-w-7xl mx-auto px-4 sm:px-6 py-6">
+                    <div class="bg-white rounded-lg shadow-sm p-6" id="page-root">
+                        <div id="main-chart" class="mb-6">
+                            {fig_html}
+                        </div>
                         {metrics_html}
+                        <div id="explain-md" class="markdown-body mt-4"></div>
                     </div>
-                    <div class=\"explain\">{explanation_html}</div>
-                </div>
+                </main>
                 <script>
-                    (function ensureMathJax() {{
-                        var rootEl = document.getElementById('page-root') || document.body;
-                        function typeset() {{
-                            if (window.MathJax) {{
-                                if (window.MathJax.typesetPromise) {{
-                                    window.MathJax.typesetPromise([rootEl]).catch(function (err) {{
-                                        if (window.console && window.console.warn) {{
-                                            console.warn('MathJax typeset failed:', err);
-                                        }}
-                                    }});
-                                }} else if (window.MathJax.Hub && window.MathJax.Hub.Queue) {{
-                                    window.MathJax.Hub.Queue(['Typeset', window.MathJax.Hub, rootEl]);
-                                }}
+                    (function ensureRender(){{
+                        var mdText = {explanation_md};
+                        var mdTarget = document.getElementById('explain-md');
+                        if (mdTarget){{
+                            if (window.marked) {{
+                                mdTarget.innerHTML = marked.parse(mdText);
+                            }} else {{
+                                mdTarget.textContent = mdText;
                             }}
                         }}
-                        if (document.readyState === 'loading') {{
-                            document.addEventListener('DOMContentLoaded', typeset);
-                        }} else {{
+                        var anchor = document.getElementById('main-chart');
+                        if (anchor) {{
+                            requestAnimationFrame(function() {{
+                                anchor.scrollIntoView({{ behavior: 'auto', block: 'start' }});
+                            }});
+                        }}
+                        function typeset() {{
+                            if (window.MathJax && window.MathJax.typesetPromise) {{
+                                window.MathJax.typesetPromise().catch(function(err){{ console.warn('MathJax error:', err); }});
+                            }}
+                        }}
+                        if (document.readyState === 'complete') {{
                             typeset();
-                        }}
-                        window.addEventListener('load', typeset);
-                        var mjScript = document.getElementById('MathJax-script');
-                        if (mjScript && !mjScript.hasAttribute('data-mathjax-listener')) {{
-                            mjScript.addEventListener('load', typeset);
-                            mjScript.setAttribute('data-mathjax-listener', 'true');
-                        }}
-                        if (!window.MathJax) {{
-                            var attempts = 0;
-                            var timer = setInterval(function () {{
-                                attempts += 1;
-                                if (window.MathJax) {{
-                                    clearInterval(timer);
-                                    typeset();
-                                }} else if (attempts > 20) {{
-                                    clearInterval(timer);
-                                }}
-                            }}, 250);
+                        }} else {{
+                            window.addEventListener('load', typeset);
                         }}
                     }})();
                 </script>
@@ -8457,12 +8718,18 @@ class LightweightAnalysis:
             }
 
             explanation_html = (
-                "<h4>口径说明</h4>"
+                "<h4>页面目的</h4>"
                 "<ul>"
-                "<li><b>每日最低所需本金</b>：日内逐笔回放，所需权益 = $\\max(0, -\\text{可用现金}) + \\text{空头保证金}$，其中空头保证金 = 空头市值 × 保证金比例。</li>"
-                "<li><b>资金占用收益率</b>：当日盈亏 ÷ 当日最低所需本金，其中当日盈亏来自盯市文件。</li>"
-                "<li><b>授信规则</b>：卖出平多是否T+0回补现金、开空所得是否计入可用现金、<code>fee</code> 逐笔/日终计提、空头保证金比例等，均来自《授信与保证金规则采集清单》。</li>"
+                "<li>量化日内最大资金占用，检查授信/保证金配置是否匹配交易节奏。</li>"
+                "<li>计算资金占用收益率，评估单位占用资金产生的回报。</li>"
                 "</ul>"
+                "<h4>实现方式</h4>"
+                "<ol>"
+                "<li>按 <code>tradeTimestamp</code>/<code>Timestamp</code> 时间顺序逐笔回放：买入(<code>B</code>)现金流出 = <code>tradeAmount + fee</code>；卖出(<code>S</code>)现金回笼 = <code>tradeAmount - fee</code>，同步更新多/空持仓数量。</li>"
+                "<li>空头保证金 = 空头市值 × 保证金比例；所需权益 = $\\max(0, -\\text{可用现金}) + \\text{空头保证金}$，记录当日最高值作为“每日最低所需本金”。</li>"
+                "<li>日度资金占用收益率 = 当日盯市盈亏 ÷ 当日最低所需本金；累计曲线为日度收益率的算术累加。</li>"
+                "<li>授信规则（卖出回款是否T+0、开空所得是否计入现金、<code>fee</code> 逐笔计提等）沿用当前配置，并体现在回放现金流与保证金计算中。</li>"
+                "</ol>"
             )
 
             self._save_figure_pair_with_details(
@@ -8560,12 +8827,14 @@ class LightweightAnalysis:
             def _metrics_tbl(ms):
                 if not ms:
                     return ""
-                rows = "".join([f"<tr><td>{k}</td><td>{v}</td></tr>" for k,v in ms.items()])
+                rows = "".join([f"<tr><td class='py-2 px-3 text-gray-600'>{k}</td><td class='py-2 px-3 text-gray-900 font-medium'>{v}</td></tr>" for k,v in ms.items()])
                 return f"""
-                <table style=\"width:100%;border-collapse:collapse;margin:10px 0;\">
-                    <thead><tr style=\"background:#f4f6f8;text-align:left;\"><th style=\"padding:8px\">指标</th><th style=\"padding:8px\">数值</th></tr></thead>
-                    <tbody>{rows}</tbody>
-                </table>
+                <div class="mt-2 mb-2">
+                    <table class="w-full text-sm border border-gray-100 rounded-md overflow-hidden">
+                        <thead class="bg-gray-50 text-gray-500"><tr><th class="py-2 px-3 text-left">指标</th><th class="py-2 px-3 text-left">数值</th></tr></thead>
+                        <tbody class="divide-y divide-gray-100">{rows}</tbody>
+                    </table>
+                </div>
                 """
 
             html = f"""
@@ -8743,8 +9012,8 @@ class LightweightAnalysis:
             print(f"    <i class='fas fa-times-circle text-red-500'></i> 保存失败 {name}: {e}")
 
     def create_lightweight_dashboard(self):
-        """创建轻量级仪表板（Tailwind CSS版）"""
-        print("\n<i class='fas fa-sliders-h text-gray-600'></i> 创建轻量级仪表板...")
+        """创建仪表板（Tailwind CSS版）"""
+        print("\n<i class='fas fa-sliders-h text-gray-600'></i> 创建仪表板...")
         
         # 获取关键绩效指标，若未计算则使用默认值
         metrics = getattr(self, 'strategy_metrics', {})
@@ -8752,6 +9021,17 @@ class LightweightAnalysis:
         max_drawdown = metrics.get('max_drawdown', 'N/A')
         sharpe = metrics.get('sharpe_ratio', 'N/A')
         win_rate = metrics.get('win_rate', 'N/A')
+
+        def _need_refresh(v):
+            return v in (None, 'N/A') or (isinstance(v, str) and v.strip() == '')
+
+        if any(_need_refresh(v) for v in [total_return, max_drawdown, sharpe, win_rate]):
+            if self._ensure_strategy_metrics_from_nav():
+                metrics = getattr(self, 'strategy_metrics', {})
+                total_return = metrics.get('total_return_nav', total_return)
+                max_drawdown = metrics.get('max_drawdown', max_drawdown)
+                sharpe = metrics.get('sharpe_ratio', sharpe)
+                win_rate = metrics.get('win_rate', win_rate)
         
         # 获取首日资产信息
         first_day_assets_display = "N/A"
@@ -8798,7 +9078,7 @@ class LightweightAnalysis:
         <head>
             <meta charset="utf-8">
             <meta name="viewport" content="width=device-width, initial-scale=1">
-            <title>轻量级量化策略分析报告</title>
+            <title>量化策略分析报告</title>
             <script src="https://cdn.tailwindcss.com"></script>
             
             <script src="https://cdn.plot.ly/plotly-latest.min.js"></script>
@@ -8815,7 +9095,7 @@ class LightweightAnalysis:
             <div class="max-w-7xl mx-auto">
                 <!-- Header -->
                 <header class="bg-white rounded-xl shadow-sm p-8 mb-8 text-center border-t-4 border-blue-500">
-                    <h1 class="text-3xl font-bold text-gray-900 mb-2"><i class='fas fa-rocket text-blue-500'></i> 轻量级量化策略分析报告</h1>
+                    <h1 class="text-3xl font-bold text-gray-900 mb-2"><i class='fas fa-rocket text-blue-500'></i> 量化策略分析报告</h1>
                     <div class="flex justify-center items-center space-x-4 text-sm text-gray-500 mb-4">
                         <span><i class='far fa-calendar-alt text-gray-500'></i> 生成时间: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}</span>
                         <span><i class='fas fa-chart-bar text-indigo-500'></i> 数据量: {len(self.df):,} 条</span>
@@ -8841,7 +9121,7 @@ class LightweightAnalysis:
                     </div>
                     <!-- Win Rate -->
                     <div class="bg-white rounded-xl shadow-sm p-6 border-l-4 border-[#e53935]">
-                        <div class="text-sm text-gray-500 uppercase tracking-wide font-semibold mb-1">胜率 (日度)</div>
+                        <div class="text-sm text-gray-500 uppercase tracking-wide font-semibold mb-1">盈利日占比</div>
                         <div class="text-3xl font-bold text-gray-800">{win_rate}</div>
                     </div>
                 </div>
@@ -8905,16 +9185,16 @@ class LightweightAnalysis:
                     ('amount_by_board_pie_light', '按交易所板块的交易/盈利占比（轻量化）'),
                 ]
             },
-                "<i class='fas fa-bolt text-yellow-400'></i> 交易执行分析": {
-                    'main': [
-                        ('fill_rate_timeseries_light', '成交率时间序列（轻量化）'),
-                    ],
-                    'sub': [
-                        ('intraday_avg_holding_time_light', '交易平均持仓时间（按买入日，按交易时段计）'),
-                        ('fill_rate_distribution_light', '成交率分布（轻量化）'),
-                        ('entry_exit_rank_baostock_full', '择时能力分布（5min行情，全量）'),
-                    ]
-                },
+            "<i class='fas fa-bolt text-yellow-400'></i> 交易执行分析": {
+                'main': [
+                    ('entry_exit_rank_baostock_full', '择时能力分布（5min行情，全量）'),
+                    ('fill_rate_timeseries_light', '成交率时间序列（轻量化）'),
+                ],
+                'sub': [
+                    ('intraday_avg_holding_time_light', '交易平均持仓时间（按买入日，按交易时段计）'),
+                    ('fill_rate_distribution_light', '成交率分布（轻量化）'),
+                ]
+            },
             "<i class='fas fa-money-bill-wave text-green-600'></i> 滑点成本分析": {
                 'main': [
                     ('total_cost_light', '综合交易成本分析（轻量化）'),
@@ -9342,8 +9622,9 @@ class LightweightAnalysis:
             df['cum_return_nav'] = (1 + df['daily_return_nav']).cumprod() - 1
             df['nav_curve'] = 1 + df['cum_return_nav']
 
-            # 确保日期格式正确，转换为字符串再转为datetime以避免Plotly将date对象转为时间戳数字
+            # 确保日期格式正确，Plotly 统一使用 ISO 字符串避免轴显示为时间戳数字
             date_index = _pd.to_datetime(df['date'].astype(str))
+            date_str = date_index.strftime('%Y-%m-%d')
 
             # 基准对齐（按策略交易日对齐，默认展示深证成指）
             bench_curves = []
@@ -9360,22 +9641,23 @@ class LightweightAnalysis:
                     if merged_bench['cumulative_return'].notna().sum() == 0:
                         continue
                     bench_nav_curve = 1 + merged_bench['cumulative_return'].astype(float)
-                    bench_curves.append((bench_name, merged_bench['date'], bench_nav_curve))
-                    bench_daily_series.append((bench_name, merged_bench['date'], merged_bench['daily_return'].astype(float)))
+                    bench_dates_str = merged_bench['date'].dt.strftime('%Y-%m-%d')
+                    bench_curves.append((bench_name, bench_dates_str, bench_nav_curve))
+                    bench_daily_series.append((bench_name, bench_dates_str, merged_bench['daily_return'].astype(float)))
                     if primary_benchmark is None or bench_name == '深证成指':
                         primary_benchmark = bench_name
 
             # 主图：净值曲线（首日=1），保持单轴便于在仪表板预览
             fig_nav = go.Figure()
             fig_nav.add_trace(go.Scatter(
-                x=date_index,
+                x=date_str,
                 y=df['nav_curve'],
                 mode='lines',
                 name='真实净值曲线',
                 line=dict(color='#16a085', width=2.3)
             ))
             fig_nav.add_trace(go.Scatter(
-                x=date_index,
+                x=date_str,
                 y=df['nav_capital_curve'],
                 mode='lines',
                 name='固定本金累积曲线',
@@ -9397,7 +9679,7 @@ class LightweightAnalysis:
             fig_nav.update_layout(
                 height=520,
                 title='净值曲线对比（首日=1，固定本金 vs 真实净值 vs 基准）',
-                xaxis=dict(title='日期'),
+                xaxis=dict(title='日期', type='date'),
                 yaxis=dict(title='净值（首日=1）', tickformat='.2f'),
                 hovermode='x unified',
                 legend=dict(orientation='h', yanchor='bottom', y=1.02, xanchor='right', x=1)
@@ -9406,14 +9688,14 @@ class LightweightAnalysis:
             # 副图：日收益率对比（策略两种口径 + 基准）
             fig_daily = go.Figure()
             fig_daily.add_trace(go.Scatter(
-                x=date_index,
+                x=date_str,
                 y=df['daily_return_nav'],
                 mode='lines',
                 name='真实净值日收益率',
                 line=dict(color='#16a085', width=1.8)
             ))
             fig_daily.add_trace(go.Scatter(
-                x=date_index,
+                x=date_str,
                 y=df['daily_return_capital'],
                 mode='lines',
                 name='日收益率(固定本金)',
@@ -9429,11 +9711,11 @@ class LightweightAnalysis:
                     hovertemplate=f'日期: %{{x}}<br>{bench_name}: %{{y:.2%}}<extra></extra>',
                     visible=True if bench_name == (primary_benchmark or bench_name) else 'legendonly'
                 ))
-            if len(date_index) > 0:
+            if len(date_str) > 0:
                 fig_daily.add_shape(
                     type='line',
-                    x0=date_index.min(),
-                    x1=date_index.max(),
+                    x0=date_str[0],
+                    x1=date_str[-1],
                     y0=0,
                     y1=0,
                     line=dict(color='rgba(0,0,0,0.2)', width=1)
@@ -9441,7 +9723,7 @@ class LightweightAnalysis:
             fig_daily.update_layout(
                 height=400,
                 title='日收益率对比（策略 vs 基准）',
-                xaxis=dict(title='日期'),
+                xaxis=dict(title='日期', type='date'),
                 yaxis=dict(title='日收益率', tickformat='.2%'),
                 hovermode='x unified',
                 legend=dict(orientation='h', yanchor='bottom', y=1.02, xanchor='right', x=1)
@@ -9465,7 +9747,7 @@ class LightweightAnalysis:
                 "<p>图表拆分后，累积表现与日度波动分开展示：主图聚焦长期净值对比，副图专注单日波动与相对强弱，避免混用日收益与累积收益导致的双轴混乱。</p>"
             )
 
-            nav_total_return = (df['nav_curve'].iloc[-1] - 1) if len(df) > 0 else 0.0
+            nav_total_return = (df['total_assets_num'].iloc[-1] / initial_capital - 1) if len(df) > 0 else 0.0
             capital_total_return = (df['nav_capital_curve'].iloc[-1] - 1) if len(df) > 0 else 0.0
             nav_vol = _np.nanstd(df['daily_return_nav'], ddof=1)
             sharpe_nav = (_np.nanmean(df['daily_return_nav']) / nav_vol * _np.sqrt(252)) if nav_vol > 0 else _np.nan
@@ -9956,6 +10238,11 @@ class LightweightAnalysis:
         try:
             output_path = self.reports_dir / f"{name}.html"
             mathjax_local_src = self._ensure_mathjax_bundle()
+            try:
+                self._apply_plotly_theme(fig_top)
+                self._apply_plotly_theme(fig_bottom)
+            except Exception:
+                pass
 
             def _fig_to_html_div(fig, div_id):
                 # 转原生可序列化结构，避免 numpy 类型序列化问题（包含bdata解码）
@@ -10048,24 +10335,24 @@ class LightweightAnalysis:
                 </table>
                 """
 
+            explanation_md = json.dumps(explanation_html, ensure_ascii=False)
             html = f"""
             <!DOCTYPE html>
             <html>
             <head>
-                <meta charset=\"utf-8\" />
-                <meta name=\"viewport\" content=\"width=device-width, initial-scale=1\" />
+                <meta charset="utf-8" />
+                <meta name="viewport" content="width=device-width, initial-scale=1" />
                 <title>{title}</title>
-                <script src=\"https://cdn.plot.ly/plotly-latest.min.js\"></script>
-                <link rel=\"stylesheet\" href=\"https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css\">
-                <script src=\"https://cdn.tailwindcss.com\"></script>
+                <script src="https://cdn.plot.ly/plotly-latest.min.js"></script>
+                <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+                <script src="https://cdn.tailwindcss.com"></script>
+                <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
                 <style>
-                    body {{ font-family: Arial, sans-serif; margin: 20px; }}
-                    h1 {{ margin: 0 0 15px 0; font-size: 22px; }}
-                    .grid {{ display: grid; grid-template-columns: 1fr; gap: 18px; }}
-                    @media (min-width: 1100px) {{ .grid {{ grid-template-columns: 1fr 1fr; }} }}
-                    .card {{ background:#fff; padding:16px; border-radius:10px; box-shadow:0 2px 8px rgba(0,0,0,.06); }}
-                    .subtitle {{ font-weight:600; margin:6px 0 10px 2px; }}
-                    table td, table th {{ border-bottom: 1px solid #eee; padding: 8px; }}
+                    body {{ font-family: "Noto Sans SC","Microsoft YaHei","Segoe UI",sans-serif; }}
+                    .markdown-body h3 {{ font-size: 1.05rem; margin-top: 1rem; margin-bottom: .45rem; }}
+                    .markdown-body p {{ margin: .35rem 0; color: #374151; line-height: 1.65; }}
+                    .markdown-body ul {{ margin: .25rem 0 .5rem 1.2rem; color: #374151; line-height: 1.6; list-style: disc; }}
+                    .markdown-body li {{ margin: .2rem 0; }}
                 </style>
                 <script>
                     window.MathJax = {{
@@ -10080,28 +10367,59 @@ class LightweightAnalysis:
                 </script>
                 <script id="MathJax-script" async src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-chtml-full.js" onerror="this.onerror=null; this.src='{mathjax_local_src}';"></script>
             </head>
-            <body>
-                <h1>{title}</h1>
-                <div class=\"grid\" id=\"page-root\">
-                    <div class=\"card\">
-                        <div class=\"subtitle\">{primary_title}</div>
-                        {top_html}
-                        {_metrics_tbl(metrics_primary)}
+            <body class="bg-gray-50">
+                <header class="sticky top-0 z-30 bg-white shadow-sm border-b border-gray-100">
+                    <div class="max-w-7xl mx-auto px-4 sm:px-6 py-3 flex items-center justify-between">
+                        <div>
+                            <p class="text-[11px] tracking-[0.18em] text-gray-500 uppercase">时段分析</p>
+                            <h1 class="text-xl font-semibold text-gray-900">{title}</h1>
+                        </div>
+                        <div class="text-xs text-gray-500">滚动查看完整内容</div>
                     </div>
-                    <div class=\"card\">
-                        <div class=\"subtitle\">{secondary_title}</div>
-                        {bottom_html}
-                        {_metrics_tbl(metrics_secondary)}
+                </header>
+                <main class="max-w-7xl mx-auto px-4 sm:px-6 py-6">
+                    <div class="grid gap-6 lg:grid-cols-2" id="page-root">
+                        <div class="bg-white rounded-lg shadow-sm p-5">
+                            <div class="text-sm font-semibold text-gray-800 mb-3">{primary_title}</div>
+                            {top_html}
+                            {_metrics_tbl(metrics_primary)}
+                        </div>
+                        <div class="bg-white rounded-lg shadow-sm p-5">
+                            <div class="text-sm font-semibold text-gray-800 mb-3">{secondary_title}</div>
+                            {bottom_html}
+                            {_metrics_tbl(metrics_secondary)}
+                        </div>
                     </div>
-                </div>
-                <div style=\"margin-top:14px;color:#444;line-height:1.7;\">{explanation_html}</div>
+                    <div id="explain-md" class="markdown-body mt-6 bg-white rounded-lg shadow-sm p-5"></div>
+                </main>
                 <script>
-                    window.addEventListener('load', function(){{
-                        if(window.MathJax && window.MathJax.typesetPromise){{
-                            window.MathJax.typesetPromise().catch(function(e){{ console.warn('MathJax error:', e); }});
+                    (function ensureRender(){{
+                        var mdText = {explanation_md};
+                        var target = document.getElementById('explain-md');
+                        if (target) {{
+                            if (window.marked) {{
+                                target.innerHTML = marked.parse(mdText);
+                            }} else {{
+                                target.textContent = mdText;
+                            }}
                         }}
-                    }});
-                    var timer = setInterval(function(){{ if(window.MathJax && window.MathJax.typesetPromise){{ clearInterval(timer); window.MathJax.typesetPromise(); }} }}, 400);
+                        var anchor = document.getElementById('page-root');
+                        if (anchor) {{
+                            requestAnimationFrame(function() {{
+                                anchor.scrollIntoView({{ behavior: 'auto', block: 'start' }});
+                            }});
+                        }}
+                        function typeset() {{
+                            if (window.MathJax && window.MathJax.typesetPromise) {{
+                                window.MathJax.typesetPromise().catch(function(e){{ console.warn('MathJax error:', e); }});
+                            }}
+                        }}
+                        if (document.readyState === 'complete') {{
+                            typeset();
+                        }} else {{
+                            window.addEventListener('load', typeset);
+                        }}
+                    }})();
                 </script>
             </body>
             </html>
