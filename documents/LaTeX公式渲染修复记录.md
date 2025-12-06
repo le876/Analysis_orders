@@ -4,7 +4,7 @@
 2025-10-05
 
 ## 问题描述
-在"策略因子特征暴露度（轻量化）"页面中，方法说明部分的LaTeX数学公式无法正确渲染，显示为原始的LaTeX代码文本而非数学符号。
+在“策略因子特征暴露度”页面中，方法说明部分的LaTeX数学公式无法正确渲染，显示为原始的LaTeX代码文本而非数学符号。
 
 ## 问题根本原因
 使用了 `\(...\)` 作为LaTeX行内公式定界符，但在HTML的JavaScript字符串中，反斜杠 `\` 会被JavaScript解析器当作转义字符处理掉，导致实际传递给MathJax的是 `(...)` 而不是 `\(...\)`，因此MathJax无法识别这些公式。
@@ -116,7 +116,7 @@ window.MathJax = {
 - 修改的核心文件：`lightweight_analysis.py`（第4172-4182行）
 - 生成的HTML模板：`_save_figure_with_details` 方法（第7081-7332行）
 - 受影响的可视化页面：
-  - `factor_exposure_light.html`（策略因子特征暴露度-轻量化）
+- `factor_exposure_light.html`（策略因子特征暴露度）
   - `factor_direction_exposure_light.html`（因子特征暴露-多空分解）
 
 ## 后续注意事项

@@ -15,6 +15,9 @@
 - `python -m pip install -r requirements.txt`：安装 pandas、plotly、statsmodels 等依赖。
 - `python src/lightweight_analysis.py`：运行完整分析流程并刷新 `reports/visualization_analysis/index.html`。
 - `python -m compileall src`：快速语法检查，确保提交前无明显错误。
+- 在 CLI 中使用预置的 conda 环境 `quant_env` 运行全量流程的可复用命令（无需先激活）：  
+  `conda run -n quant_env --no-capture-output python src/lightweight_analysis.py`
+  （若默认超时时间不足，可增加 `timeout` 参数/等待至完成）
 
 ## 编码风格与命名约定
 采用 PEP 8 默认格式，统一使用 4 空格缩进；函数与变量使用 `snake_case`，类名采用 `PascalCase`，路径操作优先 `pathlib.Path`。新增公共接口请补充类型注解。终端输出请沿用 `_print_dup`，确保字符替换逻辑一致。文档、注释与沟通优先使用中文，如需英文请保证双语说明准确一致。

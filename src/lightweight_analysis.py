@@ -8181,9 +8181,20 @@ class LightweightAnalysis:
         except Exception:
             pass
 
+    def _clean_title_text(self, text: str) -> str:
+        """移除标题中的括号补充信息，仅保留主标题。"""
+        try:
+            cleaned = re.sub(r'（[^（）]*）', '', text)
+            cleaned = re.sub(r'\([^()]*\)', '', cleaned)
+            cleaned = re.sub(r'\s+', ' ', cleaned)
+            return cleaned.strip()
+        except Exception:
+            return text
+
     def _save_figure_with_details(self, fig, name: str, title: str, explanation_html: str, metrics: dict, extra_figs: Optional[List[Tuple[str, go.Figure]]] = None):
         """保存含说明与指标汇总的图表页面"""
         try:
+            title = self._clean_title_text(title)
             output_path = self.reports_dir / f"{name}.html"
 
             # 将所有数据转换为原生可序列化类型，避免 Plotly 在部分环境下将 y 渲染为顺序索引
@@ -8752,6 +8763,9 @@ class LightweightAnalysis:
         - 在新窗口打开时，CSS在宽屏下自动并排，两列布局。
         """
         try:
+            title = self._clean_title_text(title)
+            primary_title = self._clean_title_text(primary_title)
+            secondary_title = self._clean_title_text(secondary_title)
             output_path = self.reports_dir / f"{name}.html"
 
             def _to_native(obj):
@@ -8885,6 +8899,10 @@ class LightweightAnalysis:
     def _save_figure_triple_with_details(self, fig1, fig2, fig3, name: str, title: str, explanation_html: str, metrics_primary: dict, metrics_secondary: dict, title1: str, title2: str, title3: str):
         """保存三个图表的页面（dashboard预览时纵向，新窗口打开时两列）"""
         try:
+            title = self._clean_title_text(title)
+            title1 = self._clean_title_text(title1)
+            title2 = self._clean_title_text(title2)
+            title3 = self._clean_title_text(title3)
             output_path = self.reports_dir / f"{name}.html"
 
             def _to_native(obj):
@@ -9148,7 +9166,7 @@ class LightweightAnalysis:
                     ('daily_returns_comparison_light', '日收益率对比（衡量下单质量的三种方法）'),
                     ('cumulative_returns_comparison_light', '累积收益对比（三种方法）'),
                     ('strategy_vs_benchmark_light', '策略vs基准指数累积收益对比'),
-                    ('returns_distribution_light', '日收益率分布（轻量化）'),
+                    ('returns_distribution_light', '日绝对收益分布（盯市）'),
                     ('capital_utilization_light', '每日最低所需本金 + 资金占用收益率'),
                 ]
             },
@@ -9159,14 +9177,14 @@ class LightweightAnalysis:
                     ('ic_stability_monthly_light', 'IC按月份稳定性（T+1）含极端信号组追踪'),
                 ],
                 'sub': [
-                    ('ic_distribution_light', 'IC分布（轻量化）'),
+                    ('ic_distribution_light', 'IC分布'),
                     ('ic_stability_regime_light', 'IC按行情分段（T+1）'),
                     ('ic_stability_industry_light', 'IC按行业分段（T+1）'),
                 ]
             },
             "<i class='fas fa-bullseye text-red-500'></i> 预测有效性分析": {
                 'main': [
-                    ('pred_real_relationship_light', '预测值与实际收益关系分析（轻量化）'),
+                    ('pred_real_relationship_light', '预测值与实际收益关系分析'),
                 ],
                 'sub': [
                 ]
@@ -9174,34 +9192,34 @@ class LightweightAnalysis:
             "<i class='fas fa-chart-bar text-indigo-500'></i> 投资组合分析": {
                 'main': [
                     ('factor_attribution_main', '因子归因（FF3）主页面'),
-                    ('portfolio_composition_light', '收盘后持仓市值（轻量化）'),
+                    ('portfolio_composition_light', '收盘后持仓市值'),
                 ],
                 'sub': [
-                    ('factor_exposure_light', '策略因子特征暴露度（轻量化）'),
+                    ('factor_exposure_light', '策略因子特征暴露度'),
                     ('factor_direction_exposure_light', '新增仓位多空方向分解'),
                     ('factor_holdings_exposure_light', '持仓因子特征暴露'),
-                    ('amount_by_market_cap_pie_light', '按市值大小的交易/盈利占比（轻量化）'),
-                    ('amount_by_industry_pie_light', '按行业的交易/盈利占比（轻量化）'),
-                    ('amount_by_board_pie_light', '按交易所板块的交易/盈利占比（轻量化）'),
+                    ('amount_by_market_cap_pie_light', '按市值大小的交易/盈利占比'),
+                    ('amount_by_industry_pie_light', '按行业的交易/盈利占比'),
+                    ('amount_by_board_pie_light', '按交易所板块的交易/盈利占比'),
                 ]
             },
             "<i class='fas fa-bolt text-yellow-400'></i> 交易执行分析": {
                 'main': [
                     ('entry_exit_rank_baostock_full', '择时能力分布（5min行情，全量）'),
-                    ('fill_rate_timeseries_light', '成交率时间序列（轻量化）'),
+                    ('fill_rate_timeseries_light', '成交率时间序列'),
                 ],
                 'sub': [
                     ('intraday_avg_holding_time_light', '交易平均持仓时间（按买入日，按交易时段计）'),
-                    ('fill_rate_distribution_light', '成交率分布（轻量化）'),
+                    ('fill_rate_distribution_light', '成交率分布'),
                 ]
             },
             "<i class='fas fa-money-bill-wave text-green-600'></i> 滑点成本分析": {
                 'main': [
-                    ('total_cost_light', '综合交易成本分析（轻量化）'),
+                    ('total_cost_light', '综合交易成本分析'),
                 ],
                 'sub': [
-                    ('time_slippage_light', '时间滑点分析（轻量化）'),
-                    ('price_slippage_light', '价格滑点分析（轻量化）'),
+                    ('time_slippage_light', '时间滑点分析'),
+                    ('price_slippage_light', '价格滑点分析'),
                 ]
             },
             "<i class='fas fa-clock text-blue-400'></i> 时段盈利能力分析": {
@@ -9294,7 +9312,7 @@ class LightweightAnalysis:
             
         dashboard_html += """
                 <footer class="text-center text-gray-400 text-sm py-8">
-                    <p><i class='fas fa-bullseye text-red-500'></i> 轻量级设计 · <i class='fas fa-rocket text-blue-500'></i> 快速分析 · <i class='fas fa-chart-bar text-indigo-500'></i> 专业洞察</p>
+                    <p><i class='fas fa-bullseye text-red-500'></i> 高效设计 · <i class='fas fa-rocket text-blue-500'></i> 快速分析 · <i class='fas fa-chart-bar text-indigo-500'></i> 专业洞察</p>
                     <p class="mt-1">优化策略: 智能采样 + CDN加载 + 数据压缩 + Tailwind CSS</p>
                 </footer>
             </div>
@@ -9314,10 +9332,10 @@ class LightweightAnalysis:
 <head>
     <meta charset="utf-8">
     <meta http-equiv="refresh" content="0; url=index.html">
-    <title>轻量级仪表板已迁移</title>
+    <title>仪表板已迁移</title>
 </head>
 <body style="font-family:system-ui,sans-serif;text-align:center;padding-top:60px;">
-    <h2>轻量级仪表板已迁移至 <a href="index.html">index.html</a></h2>
+    <h2>仪表板已迁移至 <a href="index.html">index.html</a></h2>
 </body>
 </html>
 """
@@ -9327,11 +9345,11 @@ class LightweightAnalysis:
         except Exception:
             pass
             
-        print(f"<i class='fas fa-check-circle text-green-500'></i> 轻量级仪表板已保存: {dashboard_path}")
+        print(f"<i class='fas fa-check-circle text-green-500'></i> 仪表板已保存: {dashboard_path}")
         return dashboard_path
         
     def run_analysis(self):
-        """运行轻量级分析（带模块耗时打印）"""
+        """运行分析（带模块耗时打印）"""
         from time import perf_counter as _tpc
         def _timeit(label, fn):
             _t0 = _tpc()
@@ -9340,7 +9358,7 @@ class LightweightAnalysis:
             print(f"[TIME] {label}: {_dt:.2f}s")
             return res
 
-        print("<i class='fas fa-rocket text-blue-500'></i> 启动轻量级量化分析")
+        print("<i class='fas fa-rocket text-blue-500'></i> 启动量化分析")
         print("=" * 60)
         print("<i class='fas fa-bullseye text-red-500'></i> 目标: 快速加载 + 核心洞察")
         print("=" * 60)
@@ -9363,8 +9381,8 @@ class LightweightAnalysis:
             dashboard_path = _timeit("创建仪表板", self.create_lightweight_dashboard)
             
             print("\n" + "=" * 60)
-            print("<i class='fas fa-check-circle text-green-500'></i> 轻量级分析完成!")
-            print(f"<i class='fas fa-chart-bar text-indigo-500'></i> 生成 {len(self.figures)} 个轻量级图表")
+            print("<i class='fas fa-check-circle text-green-500'></i> 分析完成!")
+            print(f"<i class='fas fa-chart-bar text-indigo-500'></i> 生成 {len(self.figures)} 个图表")
             print(f"<i class='fas fa-sliders-h text-gray-600'></i> 仪表板: {dashboard_path}")
             print(f"<i class='fas fa-bolt text-yellow-400'></i> 预计加载时间: < 5秒")
             print("=" * 60)
@@ -10236,6 +10254,9 @@ class LightweightAnalysis:
         - 在新窗口打开时，CSS在宽屏下自动并排，两列布局。
         """
         try:
+            title = self._clean_title_text(title)
+            primary_title = self._clean_title_text(primary_title)
+            secondary_title = self._clean_title_text(secondary_title)
             output_path = self.reports_dir / f"{name}.html"
             mathjax_local_src = self._ensure_mathjax_bundle()
             try:

@@ -889,6 +889,12 @@ html_text = f"""<!DOCTYPE html>
           <li>加权视角：提供笔数、成交金额权重、PnL（盈利部分）权重三种分布；按按钮切换 Rank/Edge 视角。</li>
           <li>随机基准：直方图叠加 1/桶数的随机均匀基准线，并标出中位数虚线，用于对照是否优于随机择时。</li>
         </ul>
+        <div class="text-base font-semibold text-slate-900 pt-2">相关页面</div>
+        <ul class="text-sm text-indigo-700 leading-relaxed list-disc pl-5 space-y-1">
+          <li><a class="underline hover:text-indigo-500" target="_blank" rel="noopener noreferrer" href="reports/visualization_analysis/daily_returns_comparison_light.html">日收益率对比</a></li>
+          <li><a class="underline hover:text-indigo-500" target="_blank" rel="noopener noreferrer" href="reports/visualization_analysis/pred_real_relationship_light.html">预测值与实际收益关系分析</a></li>
+          <li><a class="underline hover:text-indigo-500" target="_blank" rel="noopener noreferrer" href="reports/visualization_analysis/intraday_avg_holding_time_light.html">交易平均持仓时间</a></li>
+        </ul>
       </div>
     </div>
   </div>
