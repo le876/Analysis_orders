@@ -3978,27 +3978,84 @@ class LightweightAnalysis:
             self._intraday_snapshot_cache['has_intraday'] = False
             return self._intraday_snapshot_cache.copy()
 
-        minute_df['close'] = pd.to_numeric(minute_df[close_col], errors='coerce')
+        minute_df['close'] = pd.to_numeric(minute_df[close_col], errors='coerce').astype('float32')
         if high_col:
-            minute_df['high'] = pd.to_numeric(minute_df[high_col], errors='coerce')
+            minute_df['high'] = pd.to_numeric(minute_df[high_col], errors='coerce').astype('float32')
         else:
             minute_df['high'] = minute_df['close']
         if low_col:
-            minute_df['low'] = pd.to_numeric(minute_df[low_col], errors='coerce')
+            minute_df['low'] = pd.to_numeric(minute_df[low_col], errors='coerce').astype('float32')
         else:
             minute_df['low'] = minute_df['close']
 
-        group_close = minute_df.groupby('Code')['close']
-        minute_df['ret_5m'] = group_close.pct_change()
-        minute_df['mom_5m'] = minute_df['ret_5m'].replace([np.inf, -np.inf], np.nan)
-        minute_df['mom_30m'] = group_close.transform(lambda s: s / s.shift(6) - 1).replace([np.inf, -np.inf], np.nan)
-        minute_df['mom_60m'] = group_close.transform(lambda s: s / s.shift(12) - 1).replace([np.inf, -np.inf], np.nan)
-        minute_df['rv_5m'] = group_close.transform(lambda s: (s.pct_change().pow(2).rolling(window=2, min_periods=1).sum()) ** 0.5).replace([np.inf, -np.inf], np.nan)
+        # 尝试使用快照缓存（基于订单与分钟K指纹），避免重复计算
+        cache_path = Path('data/trade_factor_snapshots_cache.parquet')
+        cache_meta_path = Path('data/trade_factor_snapshots_cache.meta.json')
+        try:
+            orders_fp = self._orders_file_fingerprint()
+            minute_fp = {
+                'path': str(Path(used_path).resolve()) if used_path else '',
+                'size': int(Path(used_path).stat().st_size) if used_path else -1,
+                'mtime': float(Path(used_path).stat().st_mtime) if used_path else -1.0,
+            }
+            if cache_path.exists() and cache_meta_path.exists():
+                meta = json.loads(cache_meta_path.read_text(encoding='utf-8'))
+                if meta.get('orders') == orders_fp and meta.get('minute') == minute_fp:
+                    try:
+                        cached = pd.read_parquet(cache_path)
+                        print(f"[CACHE] 命中分钟因子快照: {cache_path} ({len(cached)} 行)")
+                        self._intraday_snapshot_cache = cached.copy()
+                        return self._intraday_snapshot_cache.copy()
+                    except Exception:
+                        pass
+        except Exception:
+            pass
 
-        # 10分钟窗口的价格振幅（归一化）
-        rolling_high = minute_df.groupby('Code')['high'].transform(lambda s: s.rolling(window=2, min_periods=1).max())
-        rolling_low = minute_df.groupby('Code')['low'].transform(lambda s: s.rolling(window=2, min_periods=1).min())
-        minute_df['range_day'] = ((rolling_high - rolling_low) / minute_df['close']).replace([np.inf, -np.inf], np.nan)
+        # === 高频特征计算：优先使用 polars 加速，失败回退 pandas ===
+        use_polars_calc = False
+        try:
+            import polars as pl  # type: ignore
+            use_polars_calc = True
+            # 保持排序稳定，确保窗口与 shift 计算一致
+            minute_pl = pl.from_pandas(minute_df.sort_values(['Code', 'datetime']))
+            window2 = dict(window_size=2, min_periods=1)
+            window6 = dict(window_size=6, min_periods=3)
+            minute_pl = minute_pl.with_columns([
+                pl.col('close').pct_change().over('Code').alias('ret_5m'),
+            ])
+            minute_pl = minute_pl.with_columns([
+                pl.col('ret_5m').alias('mom_5m'),
+                (pl.col('close') / pl.col('close').shift(6).over('Code') - 1).alias('mom_30m'),
+                (pl.col('close') / pl.col('close').shift(12).over('Code') - 1).alias('mom_60m'),
+                (pl.col('ret_5m') ** 2).rolling_sum(**window2).over('Code').sqrt().alias('rv_5m'),
+                (
+                    pl.col('high').rolling_max(**window2).over('Code') -
+                    pl.col('low').rolling_min(**window2).over('Code')
+                ) / pl.col('close')
+                .alias('range_day'),
+            ])
+            # Rolling β: cov(ret, idx)/var(idx)，窗口=6，min_periods=3
+            minute_df = minute_pl.to_pandas()
+            # 确保所有高频特征列存在
+            for _col in ['ret_5m', 'mom_5m', 'mom_30m', 'mom_60m', 'rv_5m', 'range_day']:
+                if _col not in minute_df.columns:
+                    minute_df[_col] = np.nan
+            minute_df[['ret_5m', 'mom_5m', 'mom_30m', 'mom_60m', 'rv_5m', 'range_day']] = \
+                minute_df[['ret_5m', 'mom_5m', 'mom_30m', 'mom_60m', 'rv_5m', 'range_day']].replace([np.inf, -np.inf], np.nan)
+        except Exception as exc:
+            if use_polars_calc:
+                print(f"<i class='fas fa-exclamation-triangle text-yellow-500'></i> polars 高频特征计算失败，回退 pandas: {exc}")
+            # 回退 pandas 计算
+            group_close = minute_df.groupby('Code')['close']
+            minute_df['ret_5m'] = group_close.pct_change()
+            minute_df['mom_5m'] = minute_df['ret_5m'].replace([np.inf, -np.inf], np.nan)
+            minute_df['mom_30m'] = group_close.transform(lambda s: s / s.shift(6) - 1).replace([np.inf, -np.inf], np.nan)
+            minute_df['mom_60m'] = group_close.transform(lambda s: s / s.shift(12) - 1).replace([np.inf, -np.inf], np.nan)
+            minute_df['rv_5m'] = group_close.transform(lambda s: (s.pct_change().pow(2).rolling(window=2, min_periods=1).sum()) ** 0.5).replace([np.inf, -np.inf], np.nan)
+
+            rolling_high = minute_df.groupby('Code')['high'].transform(lambda s: s.rolling(window=2, min_periods=1).max())
+            rolling_low = minute_df.groupby('Code')['low'].transform(lambda s: s.rolling(window=2, min_periods=1).min())
+            minute_df['range_day'] = ((rolling_high - rolling_low) / minute_df['close']).replace([np.inf, -np.inf], np.nan)
 
         # 全市场等权 5m 收益（用于回退或填补缺口）
         market_ret = None
@@ -4052,15 +4109,37 @@ class LightweightAnalysis:
             self._factor_build_meta = {}
         self._factor_build_meta['beta_index_source_snapshot'] = idx_source
 
-        minute_df['beta_5m'] = np.nan
-        for code, sub in minute_df[['Code', 'ret_5m', 'idx_ret']].groupby('Code'):  # type: ignore
-            s = sub.copy()
-            if 'idx_ret' not in s.columns:
-                continue
-            cov = s['ret_5m'].rolling(window=6, min_periods=3).cov(s['idx_ret'])
-            var = s['idx_ret'].rolling(window=6, min_periods=3).var()
-            beta = cov / var.replace(0, np.nan)
-            minute_df.loc[s.index, 'beta_5m'] = beta
+        # 计算高频β（使用 ret_5m 与 idx_ret，窗口6，min_periods=3）
+        try:
+            import polars as pl  # type: ignore
+            beta_window = dict(window_size=6, min_periods=3)
+            beta_pl = pl.from_pandas(minute_df[['Code', 'datetime', 'ret_5m', 'idx_ret']].sort_values(['Code', 'datetime']))
+            beta_pl = beta_pl.with_columns([
+                pl.col('ret_5m').rolling_mean(**beta_window).over('Code').alias('_mx'),
+                pl.col('idx_ret').rolling_mean(**beta_window).over('Code').alias('_my'),
+                (pl.col('ret_5m') * pl.col('idx_ret')).rolling_mean(**beta_window).over('Code').alias('_mxy'),
+                (pl.col('idx_ret') ** 2).rolling_mean(**beta_window).over('Code').alias('_my2'),
+            ])
+            beta_pl = beta_pl.with_columns([
+                (pl.col('_mxy') - pl.col('_mx') * pl.col('_my')).alias('_cov'),
+                (pl.col('_my2') - pl.col('_my') * pl.col('_my')).alias('_var'),
+            ])
+            beta_pl = beta_pl.with_columns([
+                pl.when(pl.col('_var') == 0)
+                .then(None)
+                .otherwise(pl.col('_cov') / pl.col('_var'))
+                .alias('beta_5m')
+            ])
+            beta_pdf = beta_pl.select(['Code', 'datetime', 'beta_5m']).to_pandas()
+            minute_df = minute_df.merge(beta_pdf, on=['Code', 'datetime'], how='left')
+        except Exception:
+            try:
+                minute_df['beta_5m'] = np.nan
+                cov = minute_df.groupby('Code')['ret_5m'].rolling(window=6, min_periods=3).cov(minute_df.set_index('Code')['idx_ret']).reset_index(level=0, drop=True)
+                var = minute_df.groupby('Code')['idx_ret'].rolling(window=6, min_periods=3).var().reset_index(level=0, drop=True)
+                minute_df['beta_5m'] = cov / var.replace(0, np.nan)
+            except Exception:
+                minute_df['beta_5m'] = np.nan
 
         feature_cols = ['mom_5m', 'mom_30m', 'mom_60m', 'rv_5m', 'beta_5m', 'range_day']
         minute_features = minute_df[['Code', 'datetime'] + feature_cols].copy()
@@ -4071,41 +4150,50 @@ class LightweightAnalysis:
         minute_features = minute_features.sort_values(['Code', 'datetime']).reset_index(drop=True)
 
         trades_sorted = trades.sort_values(['Code', 'Timestamp']).reset_index(drop=True)
-        minute_group = {code: g.reset_index(drop=True) for code, g in minute_features.groupby('Code')}
-        merged_chunks = []
-        for code, tdf in trades_sorted.groupby('Code', sort=False):
-            mdf = minute_group.get(code)
-            if mdf is None or mdf.empty:
-                fallback = tdf.copy()
-                fallback['datetime'] = pd.NaT
-                for col in feature_cols:
-                    fallback[col] = np.nan
-                    fallback[f'{col}_is_intraday'] = False
-                fallback['has_intraday'] = False
-                merged_chunks.append(fallback)
-                continue
+        asof_tolerance = pd.Timedelta(minutes=10)
 
-            left = tdf.sort_values('Timestamp').reset_index(drop=True)
-            right = mdf.sort_values('datetime').reset_index(drop=True)
-            merged_code = pd.merge_asof(
-                left,
-                right,
+        merged: Optional[pd.DataFrame] = None
+        used_polars = False
+        # 优先使用 polars 的 join_asof（多线程加速），失败再回退 pandas
+        try:
+            import polars as pl  # type: ignore
+            used_polars = True
+            # 仅保留需要的列以降低内存占用
+            minute_polars_cols = ['Code', 'datetime'] + feature_cols
+            minute_features_pl = pl.from_pandas(minute_features[minute_polars_cols])
+            trades_pl = pl.from_pandas(trades_sorted[['Code', 'Timestamp', 'trade_weight', 'long_exposure_amount', 'short_exposure_amount', 'exec_price', 'trade_date', 'trade_id']])
+            trades_pl = trades_pl.sort(['Code', 'Timestamp'])
+            minute_features_pl = minute_features_pl.sort(['Code', 'datetime'])
+            merged_pl = trades_pl.join_asof(
+                minute_features_pl,
                 left_on='Timestamp',
                 right_on='datetime',
-                direction='backward',
-                tolerance=pd.Timedelta(minutes=10)
+                by='Code',
+                strategy='backward',
+                tolerance=asof_tolerance.to_pytimedelta()
             )
-            if 'Code_x' in merged_code.columns:
-                merged_code = merged_code.rename(columns={'Code_x': 'Code'})
-            if 'Code_y' in merged_code.columns:
-                merged_code = merged_code.drop(columns=['Code_y'])
-            merged_chunks.append(merged_code)
+            merged = merged_pl.to_pandas()
+        except Exception as exc:
+            if used_polars:
+                print(f"<i class='fas fa-exclamation-triangle text-yellow-500'></i> polars join_asof 失败，回退 pandas merge_asof: {exc}")
+            used_polars = False
 
-        merged = pd.concat(merged_chunks, ignore_index=True)
+        if merged is None:
+            merged = pd.merge_asof(
+                trades_sorted,
+                minute_features,
+                left_on='Timestamp',
+                right_on='datetime',
+                by='Code',
+                direction='backward',
+                tolerance=asof_tolerance
+            )
+
         merged['has_intraday'] = merged[feature_cols].notna().any(axis=1)
         for col in feature_cols:
             merged[f'{col}_is_intraday'] = merged[col].notna()
-        merged.drop(columns=['datetime'], inplace=True)
+        if 'datetime' in merged.columns:
+            merged.drop(columns=['datetime'], inplace=True)
 
         self._intraday_snapshot_cache = merged.copy()
         try:
@@ -4116,6 +4204,30 @@ class LightweightAnalysis:
             pass
         if used_path:
             self._factor_build_meta['minute_source'] = used_path
+        if used_polars:
+            self._factor_build_meta['minute_join_engine'] = 'polars_join_asof'
+        else:
+            self._factor_build_meta['minute_join_engine'] = 'pandas_merge_asof'
+
+        # 写缓存与元信息，便于下次复用
+        try:
+            snapshot_path = Path('data/trade_factor_snapshots_cache.parquet')
+            snapshot_path.parent.mkdir(parents=True, exist_ok=True)
+            merged.to_parquet(snapshot_path, index=False)
+            cache_meta_path = Path('data/trade_factor_snapshots_cache.meta.json')
+            cache_meta = {
+                'orders': self._orders_file_fingerprint(),
+                'minute': {
+                    'path': str(Path(used_path).resolve()) if used_path else '',
+                    'size': int(Path(used_path).stat().st_size) if used_path else -1,
+                    'mtime': float(Path(used_path).stat().st_mtime) if used_path else -1.0,
+                },
+                'join_engine': self._factor_build_meta.get('minute_join_engine', 'unknown'),
+            }
+            cache_meta_path.write_text(json.dumps(cache_meta, ensure_ascii=False, indent=2), encoding='utf-8')
+        except Exception:
+            pass
+
         return self._intraday_snapshot_cache.copy()
 
     def _build_daily_positions(self) -> Optional[pd.DataFrame]:
@@ -5974,12 +6086,8 @@ class LightweightAnalysis:
             eq_by_mode = {'exit': daily_returns_equal, 'entry': daily_returns_equal}
             amt_by_mode = {'exit': daily_amount_weighted, 'entry': daily_amount_weighted}
         
-        # 方法3: PnL口径的日收益率：当日盯市PnL / 当日买入成交额
-        print("<i class='fas fa-chart-bar text-indigo-500'></i> 方法3: PnL = 当日盯市PnL / 当日买入成交额 ...")
-
-        # 计算当日买入成交额（买入成交额），只统计方向为B的成交
-        buy_amount_by_date = stock_daily.groupby('date')['buy_amount'].sum()
-        buy_amount_by_date.index = pd.to_datetime(buy_amount_by_date.index)
+        # 方法3: PnL口径的日收益率（风险基准）：当日盯市PnL / 当日风险敞口
+        print("<i class='fas fa-chart-bar text-indigo-500'></i> 方法3: PnL = 当日盯市PnL / 当日风险敞口 ...")
 
         # 尝试加载盯市NAV以获取真实PnL
         daily_pnl_spend_returns = None
@@ -5989,7 +6097,7 @@ class LightweightAnalysis:
             from pathlib import Path
             mtm_file = Path("mtm_analysis_results/daily_nav_revised.csv")
             if mtm_file.exists():
-                print("   <i class='fas fa-check-circle text-green-500'></i> 发现盯市分析结果，按'买入成交额'口径计算PnL收益率")
+                print("   <i class='fas fa-check-circle text-green-500'></i> 发现盯市分析结果，按风险敞口口径计算PnL收益率")
                 
                 # 读取盯市数据并解析
                 mtm_df = pd.read_csv(mtm_file)
@@ -6029,24 +6137,29 @@ class LightweightAnalysis:
                 
                 mtm_df['cash_num'] = cash_series
                 mtm_df['total_assets_num'] = mtm_df['cash_num'] + mtm_df['long_value_num'] - mtm_df['short_value_num']
+                mtm_df['exposure_risk'] = (mtm_df['long_value_num'].abs() + mtm_df['short_value_num'].abs()) / 2
+                mtm_df['equity_prev'] = mtm_df['total_assets_num'].shift(1)
                 
                 # 当日真实PnL
                 mtm_df = mtm_df.sort_values('date')
                 mtm_df['daily_pnl'] = mtm_df['total_assets_num'].diff()
                 
                 daily_pnl_series = pd.Series(mtm_df['daily_pnl'].values, index=mtm_df['date']).sort_index()
+                exposure_series = pd.Series(mtm_df['exposure_risk'].values, index=mtm_df['date']).sort_index()
+                equity_prev_series = pd.Series(mtm_df['equity_prev'].values, index=mtm_df['date']).sort_index()
 
-                # 对齐日期并计算 PnL/买入成交额
+                # 对齐日期并计算 PnL/风险敞口（无敞口时回退到前一日NAV）
                 aligned = pd.concat([
                     daily_pnl_series.rename('daily_pnl'),
-                    buy_amount_by_date.rename('daily_spend')
+                    exposure_series.rename('daily_exposure'),
+                    equity_prev_series.rename('equity_prev')
                 ], axis=1)
 
-                # 仅当日买入额>0时才有定义
-                valid = (aligned['daily_spend'] > 0) & aligned['daily_pnl'].notna()
-                daily_pnl_spend_returns = (aligned.loc[valid, 'daily_pnl'] / aligned.loc[valid, 'daily_spend']).clip(-1.0, 1.0)
+                denom = aligned['daily_exposure'].where(aligned['daily_exposure'] > 0, aligned['equity_prev'])
+                valid = (denom > 0) & aligned['daily_pnl'].notna()
+                daily_pnl_spend_returns = (aligned.loc[valid, 'daily_pnl'] / denom.loc[valid]).clip(-1.0, 1.0)
                 # 保留对齐数据与有效掩码用于后续指标
-                pnl_spend_df = aligned
+                pnl_spend_df = aligned.assign(denominator=denom)
                 pnl_spend_valid_mask = valid
             else:
                 print("   <i class='fas fa-exclamation-triangle text-yellow-500'></i> 未找到盯市分析结果，无法计算PnL口径，跳过该方法")
@@ -6166,10 +6279,10 @@ class LightweightAnalysis:
 <ol>
     <li>对每只 <code>Code</code> 按 <code>Timestamp</code> 先后执行 FIFO 配对：买入(<code>B</code>)与卖出(<code>S</code>)的 <code>tradeQty</code>、<code>tradeAmount</code>、<code>fee</code> 成对，单笔净收益 = 卖出金额 − 买入金额 − 买卖两端 <code>fee</code>，单笔收益率 = 净收益 ÷ 开仓时 <code>tradeAmount</code>。</li>
     <li>按归因日期聚合：平仓日归因使用卖出日，买入日归因使用买入日；分别计算等权均值与以开仓 <code>tradeAmount</code> 为权重的加权均值。</li>
-    <li><b>PnL</b>：当日盯市盈亏 ÷ 当日买入方向的 <code>tradeAmount</code> 之和（仅分母>0时计算），体现单位现金投放的真实产出。</li>
+    <li><b>PnL</b>（风险口径）：当日盯市盈亏 ÷ 当日平均风险敞口，其中敞口 = (|多头市值| + |空头市值|)/2；若敞口缺失则回退到前一日NAV，仅分母>0时计算。</li>
     <li>曲线超过200个交易日会按时间抽样展示，避免加载过重，所有统计均基于全量数据。</li>
 </ol>
-<div style="margin-top:8px;">解读建议：若金额加权明显低于等权，说明大额交易执行质量不足；PnL若弱于配对收益，通常由持有期波动或未平仓头寸拖累。</div>
+<div style="margin-top:8px;">解读建议：若金额加权明显低于等权，说明大额交易执行质量不足；PnL若弱于配对收益，通常由持有期波动、未平仓敞口或杠杆/对冲暴露影响。</div>
 """
             
             # 添加按钮用于切换归因方式
@@ -6207,7 +6320,7 @@ class LightweightAnalysis:
             if 'daily_pnl_spend_returns_clipped' in locals() and len(daily_pnl_spend_returns_clipped) > 0:
                 returns_for_display = daily_pnl_spend_returns_clipped
                 data_source_name = "PnL"
-                calculation_method = "当日盯市PnL ÷ 当日买入成交额（仅分母>0日）"
+                calculation_method = "当日盯市PnL ÷ 当日风险敞口（无敞口时回退前一日NAV，仅分母>0）"
             else:
                 # 回退：等权日收益率
                 returns_for_display = daily_returns
@@ -6242,61 +6355,38 @@ class LightweightAnalysis:
                 xaxis=dict(type='date')
             )
             
-            # 直接计算关键指标，避免数据裁剪导致的不一致
-            # 指标计算：若采用 PnL 口径，则不使用复利“总收益率/年化收益率”，改为现金效率指标
-            use_spend_ratio = (data_source_name == "PnL")
+            # 直接计算关键指标，避免数据裁剪导致的不一致（PnL风险口径视为常规日收益序列）
+            real_cumulative = (1 + returns_for_display).cumprod() - 1 if len(returns_for_display) > 0 else pd.Series(dtype=float)
+            total_return = real_cumulative.iloc[-1] if len(real_cumulative) > 0 else 0.0
+            win_rate = (returns_for_display > 0).mean() if len(returns_for_display) > 0 else 0.0
+            volatility = returns_for_display.std() * np.sqrt(252) if len(returns_for_display) > 1 else 0.0
 
-            if use_spend_ratio and pnl_spend_df is not None and pnl_spend_valid_mask is not None:
-                valid_df = pnl_spend_df.loc[pnl_spend_valid_mask].copy()
-                total_pnl_sum = float(valid_df['daily_pnl'].sum()) if len(valid_df) > 0 else 0.0
-                total_spend_sum = float(valid_df['daily_spend'].sum()) if len(valid_df) > 0 else 0.0
-                cumulative_cash_efficiency = (total_pnl_sum / total_spend_sum) if total_spend_sum > 0 else 0.0
-
-                # 仍展示序列统计（非复利）
-                win_rate = (returns_for_display > 0).mean() if len(returns_for_display) > 0 else 0.0
-                volatility = returns_for_display.std() * np.sqrt(252) if len(returns_for_display) > 1 else 0.0
-
-                perf_metrics = {
-                    '累计资金效率(ΣPnL/ΣSpend)': f"{cumulative_cash_efficiency:.2%}",
-                    '样本有效天数': f"{int(pnl_spend_valid_mask.sum())}天",
-                    '胜率': f"{win_rate:.2%}",
-                    '年化波动率(序列)': f"{volatility:.2%}",
-                    '数据来源': data_source_name,
-                    '计算方法': calculation_method
-                }
+            if len(returns_for_display) > 0:
+                cumulative_nav_series = (1 + returns_for_display).cumprod()
+                rolling_max = cumulative_nav_series.expanding().max()
+                drawdown = (cumulative_nav_series - rolling_max) / rolling_max
+                max_drawdown = drawdown.min()
             else:
-                # 传统收益序列指标（适用于等权/金额加权等）
-                real_cumulative = (1 + returns_for_display).cumprod() - 1 if len(returns_for_display) > 0 else pd.Series(dtype=float)
-                total_return = real_cumulative.iloc[-1] if len(real_cumulative) > 0 else 0.0
-                win_rate = (returns_for_display > 0).mean() if len(returns_for_display) > 0 else 0.0
-                volatility = returns_for_display.std() * np.sqrt(252) if len(returns_for_display) > 1 else 0.0
-
-                if len(returns_for_display) > 0:
-                    cumulative_nav_series = (1 + returns_for_display).cumprod()
-                    rolling_max = cumulative_nav_series.expanding().max()
-                    drawdown = (cumulative_nav_series - rolling_max) / rolling_max
-                    max_drawdown = drawdown.min()
-                else:
-                    max_drawdown = 0.0
+                max_drawdown = 0.0
+            
+            if len(returns_for_display) > 1:
+                annualized_return = (1 + total_return) ** (252 / len(returns_for_display)) - 1
+            else:
+                annualized_return = 0.0
                 
-                if len(returns_for_display) > 1:
-                    annualized_return = (1 + total_return) ** (252 / len(returns_for_display)) - 1
-                else:
-                    annualized_return = 0.0
-                    
-                sharpe_ratio = (annualized_return / volatility) if volatility > 0 else 0.0
-                
-                perf_metrics = {
-                    '总收益率': f"{total_return:.2%}",
-                    '年化收益率': f"{annualized_return:.2%}",
-                    '年化波动率': f"{volatility:.2%}",
-                    '夏普比率': f"{sharpe_ratio:.3f}",
-                    '最大回撤': f"{max_drawdown:.2%}",
-                    '胜率': f"{win_rate:.2%}",
-                    '交易天数': f"{len(returns_for_display)}天",
-                    '数据来源': data_source_name,
-                    '计算方法': calculation_method
-                }
+            sharpe_ratio = (annualized_return / volatility) if volatility > 0 else 0.0
+            
+            perf_metrics = {
+                '总收益率': f"{total_return:.2%}",
+                '年化收益率': f"{annualized_return:.2%}",
+                '年化波动率': f"{volatility:.2%}",
+                '夏普比率': f"{sharpe_ratio:.3f}",
+                '最大回撤': f"{max_drawdown:.2%}",
+                '胜率': f"{win_rate:.2%}",
+                '交易天数': f"{len(returns_for_display)}天",
+                '数据来源': data_source_name,
+                '计算方法': calculation_method
+            }
             perf_metrics.update({
                     '数据来源': data_source_name,
                     '计算方法': calculation_method,
@@ -6353,40 +6443,17 @@ class LightweightAnalysis:
             # 计算三种方法的累积收益和统计数据
             methods_data = {}
             for method_name, returns_series in methods_comparison.items():
-                # 等权/金额加权：按复利累计；PnL：按累计资金效率(ΣPnL/ΣSpend)
-                if 'PnL' in method_name and (
-                    'pnl_spend_df' in locals() and pnl_spend_df is not None and
-                    'pnl_spend_valid_mask' in locals() and pnl_spend_valid_mask is not None and
-                    isinstance(pnl_spend_df, pd.DataFrame) and
-                    'daily_pnl' in pnl_spend_df.columns and 'daily_spend' in pnl_spend_df.columns
-                ):
-                    # 构造累计资金效率时间序列（定义在分母>0的有效样本上）
-                    valid_df = pnl_spend_df.loc[pnl_spend_valid_mask].copy()
-                    valid_df = valid_df.sort_index()
-                    valid_df['cum_pnl'] = valid_df['daily_pnl'].cumsum()
-                    valid_df['cum_spend'] = valid_df['daily_spend'].cumsum()
-                    cum_ratio_series = (valid_df['cum_pnl'] / valid_df['cum_spend']).replace([np.inf, -np.inf], np.nan).dropna()
-                    cumulative_method = cum_ratio_series
-                    final_return = cumulative_method.iloc[-1] if len(cumulative_method) > 0 else 0.0
-                    volatility = returns_series.std()
-                    methods_data[method_name] = {
-                        'returns': returns_series,
-                        'cumulative': cumulative_method,
-                        'final': final_return,
-                        'volatility': volatility
-                    }
-                else:
-                    # 默认：按复利累计
-                    safe_method_returns = returns_series.clip(-0.9, 0.9)
-                    cumulative_method = (1 + safe_method_returns).cumprod() - 1
-                    final_return = cumulative_method.iloc[-1]
-                    volatility = safe_method_returns.std()
-                    methods_data[method_name] = {
-                        'returns': safe_method_returns,
-                        'cumulative': cumulative_method,
-                        'final': final_return,
-                        'volatility': volatility
-                    }
+                # 默认：按复利累计（PnL 风险口径视为常规日收益序列）
+                safe_method_returns = returns_series.clip(-0.9, 0.9)
+                cumulative_method = (1 + safe_method_returns).cumprod() - 1
+                final_return = cumulative_method.iloc[-1]
+                volatility = safe_method_returns.std()
+                methods_data[method_name] = {
+                    'returns': safe_method_returns,
+                    'cumulative': cumulative_method,
+                    'final': final_return,
+                    'volatility': volatility
+                }
             
             # 检查按暴露PnL是否需要单独显示
             pnl_final = methods_data['PnL']['final']
@@ -6502,11 +6569,11 @@ class LightweightAnalysis:
             pnl_total = pnl_final
             
             # 更新说明文档
-            cumulative_explanation = f"""
+            cumulative_explanation = """
             <h4><i class='fas fa-chart-bar text-indigo-500'></i> 计算方法说明</h4>
             <p>本页展示三种日收益序列的复利累积结果（即 $\\prod(1 + r_i) - 1$），每条曲线的数据来源与计算方法如下：</p>
             
-            <h5>方法1：等权收益（期末 {equal_total*100:.2f}%）</h5>
+            <h5>方法1：等权收益（期末 {eq_pct:.2%}）</h5>
             <ul>
                 <li><b>数据来源</b>：从 <code>data/orders.parquet</code> 中按 <code>Code</code> 和 <code>Timestamp</code> 先后进行买卖配对（FIFO原则）</li>
                 <li><b>单笔收益率</b>：$r_{{\\text{{单笔}}}} = \\frac{{\\text{{卖出}}_{{\\text{{tradeAmount}}}} - \\text{{买入}}_{{\\text{{tradeAmount}}}} - \\text{{总}}_{{\\text{{fee}}}}}}{{\\text{{买入}}_{{\\text{{tradeAmount}}}}}}$</li>
@@ -6515,7 +6582,7 @@ class LightweightAnalysis:
                 <li><b>局限</b>：仅包含已平仓交易，未平仓浮动盈亏不计入</li>
             </ul>
             
-            <h5>方法2：金额加权收益（期末 {weighted_total*100:.2f}%）</h5>
+            <h5>方法2：金额加权收益（期末 {wt_pct:.2%}）</h5>
             <ul>
                 <li><b>数据来源</b>：与等权收益相同的配对交易数据</li>
                 <li><b>日收益聚合</b>：按开仓时 <code>tradeAmount</code> 作为权重，计算加权平均日收益率</li>
@@ -6523,14 +6590,14 @@ class LightweightAnalysis:
                 <li><b>局限</b>：同样仅包含已平仓交易</li>
             </ul>
             
-            <h5>方法3：PnL（期末 {pnl_total*100:.2f}%）</h5>
+            <h5>方法3：PnL（风险口径，期末 {pnl_pct:.2%}）</h5>
             <ul>
                 <li><b>数据来源</b>：从盯市文件读取每日总资产，计算总资产差分得到当日盈亏</li>
-                <li><b>分母定义</b>：当日 <code>direction</code> 为 <code>B</code> 的所有 <code>tradeAmount</code> 之和（当日买入总额）</li>
-                <li><b>日收益率</b>：$r_t = \\frac{{\\text{{当日盈亏}}_t}}{{\\text{{当日买入总额}}_t}}$（仅在当日买入总额 > 0 时定义）</li>
-                <li><b>累计口径</b>：累计资金效率 = $\\frac{{\\sum \\text{{当日盈亏}}}}{{\\sum \\text{{当日买入总额}}}}$</li>
-                <li><b>优点</b>：包含全部持仓（已平仓+未平仓），真实反映现金投入回报</li>
-                <li><b>适用场景</b>：资金利用效率监控、真实盈利能力评估</li>
+                <li><b>分母定义</b>：当日平均风险敞口 $E_t = (|\\text{{多头市值}}_t| + |\\text{{空头市值}}_t|)/2$，若缺失则回退到前一日 NAV</li>
+                <li><b>日收益率</b>：$r_t = \\frac{{\\text{{PnL}}_t}}{{E_t}}$，仅在 $E_t > 0$ 时定义，裁剪至 [-1, 1]</li>
+                <li><b>累计口径</b>：按日收益复利：$\\prod (1 + r_t) - 1$</li>
+                <li><b>优点</b>：包含全部持仓（已平仓+未平仓），并以风险敞口/权益为基准，反映真实风险效率</li>
+                <li><b>适用场景</b>：风险调整后的收益监控、杠杆/对冲策略的资金效率评估</li>
             </ul>
             
             <h4><i class='fas fa-thumbtack text-red-400'></i> 关键假设</h4>
@@ -6546,7 +6613,7 @@ class LightweightAnalysis:
                 <li><b>方法分离</b>：若PnL显著偏离，可能是未平仓浮动盈亏较大，或当日资金投入与平仓节奏不匹配</li>
                 <li><b>建议组合使用</b>：等权看选股能力，金额加权看配置效率，PnL看真实回报</li>
             </ul>
-            """
+            """.format(eq_pct=equal_total, wt_pct=weighted_total, pnl_pct=pnl_total)
             
             self._save_figure_with_details(
                 fig_cum_comp,
@@ -9732,7 +9799,7 @@ class LightweightAnalysis:
 
             # 确保日期格式正确，Plotly 统一使用 ISO 字符串避免轴显示为时间戳数字
             date_index = _pd.to_datetime(df['date'].astype(str))
-            date_str = date_index.strftime('%Y-%m-%d')
+            date_str = date_index.dt.strftime('%Y-%m-%d').tolist()
 
             # 基准对齐（按策略交易日对齐，默认展示深证成指）
             bench_curves = []
