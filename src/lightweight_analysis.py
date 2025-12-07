@@ -5371,7 +5371,7 @@ class LightweightAnalysis:
                 y=y_vals,
                 marker_color=colors,
                 name='日度绝对盈利',
-                hovertemplate='日期: %{x}<br>盈利: ¥%{y:,.0f}<extra></extra>'
+                hovertemplate='日期: %{x}<br>日度绝对盈利: ¥%{y:,.0f}<extra></extra>'
             ))
 
             # 7日移动平均 - 使用同一Y轴确保可见性
@@ -5411,8 +5411,10 @@ class LightweightAnalysis:
             except Exception as e:
                 print(f"   <i class='fas fa-exclamation-triangle text-yellow-500'></i> 添加盈利标注线失败: {e}")
 
+            # 统一主题与交互配置（符合前端设计规范）
+            self._apply_plotly_theme(fig_abs)
             fig_abs.update_layout(
-                title=dict(text='日度绝对盈利趋势图', x=0, font=dict(size=18)),
+                title=dict(text='日度绝对盈利趋势图', x=0),
                 xaxis=dict(
                     title='日期',
                     type='date',
@@ -5420,6 +5422,7 @@ class LightweightAnalysis:
                         buttons=list([
                             dict(count=1, label="1月", step="month", stepmode="backward"),
                             dict(count=3, label="3月", step="month", stepmode="backward"),
+                            dict(count=6, label="6月", step="month", stepmode="backward"),
                             dict(step="all", label="全部")
                         ]),
                         bgcolor='rgba(255,255,255,0.9)'
@@ -5430,16 +5433,46 @@ class LightweightAnalysis:
                 yaxis=dict(
                     title='金额（¥）',
                     tickformat=',.0f',
-                    gridcolor='rgba(0,0,0,0.05)',
                     zeroline=True,
-                    zerolinecolor='rgba(0,0,0,0.15)'
+                    zerolinecolor='#9ca3af'
                 ),
-                height=500,
-                hovermode='x unified',
-                paper_bgcolor='rgba(0,0,0,0)',
-                plot_bgcolor='rgba(0,0,0,0)',
+                height=520,
                 legend=dict(orientation='h', yanchor='bottom', y=1.02, xanchor='right', x=1)
             )
+            fig_abs.update_traces(hovertemplate='日期: %{x}<br>日度绝对盈利: ¥%{y:,.0f}<extra></extra>', selector=dict(type='bar'))
+            fig_abs.update_traces(hovertemplate='日期: %{x}<br>7日均线: ¥%{y:,.0f}<extra></extra>', selector=dict(mode='lines'))
+
+            # 日收益率分布（基于 NAV 环比收益）
+            daily_returns = mtm_df['total_assets_num'].pct_change().replace([np.inf, -np.inf], np.nan).dropna()
+            fig_ret = None
+            fig_ret_json = "null"
+            if len(daily_returns) > 0:
+                counts, edges = np.histogram(daily_returns, bins=min(40, max(10, int(np.sqrt(len(daily_returns))*2))))
+                centers = (edges[:-1] + edges[1:]) / 2
+                colors_ret = ['#e53935' if c >= 0 else '#43a047' for c in centers]
+                fig_ret = go.Figure()
+                fig_ret.add_trace(go.Bar(
+                    x=centers,
+                    y=counts,
+                    marker_color=colors_ret,
+                    name='日收益率分布',
+                    hovertemplate='收益率: %{x:.2%}<br>频数: %{y}<extra></extra>'
+                ))
+                try:
+                    mean_ret = float(daily_returns.mean())
+                    median_ret = float(daily_returns.median())
+                    fig_ret.add_vline(x=mean_ret, line_dash='dash', line_color='#1f2937', opacity=0.5)
+                    fig_ret.add_vline(x=median_ret, line_dash='dot', line_color='#6366f1', opacity=0.5)
+                except Exception:
+                    pass
+                self._apply_plotly_theme(fig_ret, yaxis_percent=False)
+                fig_ret.update_layout(
+                    title=dict(text='日收益率分布（频数）', x=0),
+                    xaxis=dict(title='日收益率', tickformat='.2%'),
+                    yaxis=dict(title='频数（天）', zeroline=True, zerolinecolor='#9ca3af'),
+                    height=420,
+                    showlegend=False
+                )
 
             # 现金一致性指标（使用原始盯市数据校验，而非重算后的现金）
             mtm_df['cash_expected_raw'] = mtm_df['total_assets_reported'] - mtm_df['long_value_num'] + mtm_df['short_value_num']
@@ -5473,10 +5506,63 @@ class LightweightAnalysis:
             config = {
                 'responsive': True,
                 'displayModeBar': False,
-                'displaylogo': False
+                'displaylogo': False,
+                'modeBarButtonsToRemove': ['pan2d', 'lasso2d']
             }
-            fig_json = json.dumps(fig_abs.to_plotly_json(), ensure_ascii=False)
+            # 转为原生 JSON，避免 TypedArray 导致的渲染异常
+            def _to_native(obj):
+                if isinstance(obj, np.ndarray):
+                    if np.issubdtype(obj.dtype, np.number):
+                        return obj.astype(float).tolist()
+                    return [str(v) for v in obj.tolist()]
+                if isinstance(obj, (np.floating, np.integer)):
+                    return float(obj)
+                try:
+                    import pandas as _pd
+                    if isinstance(obj, _pd.Timestamp):
+                        return obj.isoformat()
+                except Exception:
+                    pass
+                if isinstance(obj, dict):
+                    if 'bdata' in obj and isinstance(obj.get('bdata'), str):
+                        try:
+                            dtype_map = {'f8': np.float64, 'f4': np.float32, 'i8': np.int64, 'i4': np.int32, 'u8': np.uint64, 'u4': np.uint32}
+                            np_dtype = dtype_map.get(obj.get('dtype', 'f8'), np.float64)
+                            raw = base64.b64decode(obj['bdata'])
+                            arr = np.frombuffer(raw, dtype=np_dtype)
+                            shape_val = obj.get('shape')
+                            if shape_val is not None:
+                                try:
+                                    if isinstance(shape_val, str):
+                                        shape_tuple = tuple(int(s.strip()) for s in shape_val.replace('x', ',').split(',') if s.strip() != '')
+                                    elif isinstance(shape_val, (list, tuple)):
+                                        shape_tuple = tuple(int(s) for s in shape_val)
+                                    else:
+                                        shape_tuple = None
+                                    if shape_tuple and np.prod(shape_tuple) == arr.size:
+                                        arr = arr.reshape(shape_tuple)
+                                except Exception:
+                                    pass
+                            if np.issubdtype(arr.dtype, np.number):
+                                return arr.astype(float).tolist()
+                            return [str(v) for v in arr.tolist()]
+                        except Exception:
+                            return {k: _to_native(v) for k, v in obj.items()}
+                    return {k: _to_native(v) for k, v in obj.items()}
+                if isinstance(obj, (list, tuple)):
+                    return [_to_native(v) for v in obj]
+                if hasattr(obj, 'isoformat'):
+                    try:
+                        return obj.isoformat()
+                    except Exception:
+                        return str(obj)
+                return obj
+
+            fig_json = json.dumps(_to_native(fig_abs.to_plotly_json()), ensure_ascii=False)
+            if fig_ret is not None:
+                fig_ret_json = json.dumps(_to_native(fig_ret.to_plotly_json()), ensure_ascii=False)
             gen_time = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+            mathjax_local_src = self._ensure_mathjax_bundle()
 
             card_tpl = """
             <div class="bg-white rounded-xl shadow-sm p-5 border-l-4 {border_cls}">
@@ -5492,24 +5578,26 @@ class LightweightAnalysis:
                 card_tpl.format(border_cls="border-indigo-500", label="盈利日占比", value=abs_metrics['盈利日占比'], desc="(>0) 日占比"),
             ])
 
-            cash_html = f"""
-            <div class="space-y-2 text-sm text-gray-700">
-                <p class="font-semibold text-gray-900"><i class='fas fa-balance-scale text-indigo-500 mr-1'></i>现金一致性校验</p>
-                <p>最大现金偏差: {cash_metrics['最大现金偏差(¥)']}</p>
-                <p>平均现金偏差: {cash_metrics['平均现金偏差(¥)']}</p>
-                <p>最大相对偏差: {cash_metrics['最大相对偏差(对总资产)']}</p>
-                <p>平均相对偏差: {cash_metrics['平均相对偏差(对总资产)']}</p>
-                <p class="text-xs text-gray-500">校验公式: cash = NAV - long_value + short_value</p>
-            </div>
-            """
+            cash_list_html = "".join([
+                f"<li class='flex items-center justify-between py-1'><span>{k}</span><span class='font-semibold text-gray-900'>{v}</span></li>"
+                for k, v in cash_metrics.items()
+            ])
 
-            explain_html = """
-            <div class="space-y-2 text-sm text-gray-700 leading-relaxed">
-                <p><b>计算口径</b>：Profit_t = NAV_t - NAV_{t-1}（首日设为 NaN）；初始资金只影响首日，不改变日度绝对盈利。</p>
-                <p><b>均线与标注</b>：7日均线平滑波动；虚线标记最大盈利日与最大亏损日。</p>
-                <p><b>交互</b>：使用上方范围选择器查看近 1/3 个月，或拖动底部 Range Slider 浏览全区间。</p>
-                <p class="text-xs text-gray-500">若盯市数据口径调整，请重新生成本页面以确保一致性。</p>
-            </div>
+            explanation_md = r"""
+### 页面目的
+- 展示每日净资产变动对应的绝对盈亏，快速定位大幅波动日期与整体盈利稳定性。
+
+### 计算方式
+- 基于 `orders.parquet` 的成交额 `tradeAmount` 与手续费 `fee` 逐日回放现金流，叠加盯市多空市值得到当日总资产 $NAV_t$。
+- 日度绝对盈利 $$Profit_t = NAV_t - NAV_{t-1}$$ ，首日记为 NaN；正值用红色柱，负值用绿色柱。
+- 7 日均线 $$MA7_t = \frac{1}{k} \sum_{i=0}^{k-1} Profit_{t-i}$$，$k=\min(7,t)$，用于平滑短期波动。
+- 现金一致性检查 $$Cash_t = NAV_t - LongValue_t + ShortValue_t$$，偏差异常时需核对盯市口径与费用落账。
+
+### 交互与解读
+- 右上方时间选择器支持近 1/3/6 个月快速对比，RangeSlider 支持拖动查看全区间。
+- Hover 提示展示精确金额，虚线标记最大盈利日与最大亏损日；7 日均线用于观察盈利持续性。
+- 收益率分布直方图可识别偏斜与尾部风险，均值/中位数虚线用于判断收益集中区间。
+- 指标卡展示累计盈利、极值与盈利占比，可用于与历史版本或不同策略侧边对比。
             """
 
             html = f"""
@@ -5518,60 +5606,104 @@ class LightweightAnalysis:
             <head>
                 <meta charset="utf-8">
                 <meta name="viewport" content="width=device-width, initial-scale=1">
-                <title>日度绝对盈利（盯市）</title>
+                <title>日收益分布（盯市）</title>
                 <script src="https://cdn.tailwindcss.com"></script>
                 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
                 <script src="https://cdn.plot.ly/plotly-latest.min.js"></script>
+                <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
                 <style>
-                    body {{ font-family: "Inter", "Microsoft YaHei", sans-serif; }}
+                    body {{ font-family: "Noto Sans SC","Microsoft YaHei","Segoe UI",sans-serif; }}
                 </style>
+                <script>
+                    window.MathJax = {{
+                        tex: {{
+                            inlineMath: [["$","$"],["\\(","\\)"]],
+                            displayMath: [["$$","$$"],["\\[","\\]"]],
+                            processEscapes: true
+                        }},
+                        options: {{ skipHtmlTags: ["script","noscript","style","textarea","pre","code"] }},
+                        svg: {{ fontCache: 'global' }}
+                    }};
+                </script>
+                <script id="MathJax-script" async src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-chtml-full.js" onerror="this.onerror=null; this.src='{mathjax_local_src}';"></script>
             </head>
-            <body class="bg-gray-50 min-h-screen p-6">
-                <div class="max-w-7xl mx-auto space-y-6">
-                    <div class="flex items-center justify-between">
-                        <h1 class="text-2xl font-bold text-gray-900">
-                            <i class="fas fa-money-bill-wave text-green-600 mr-2"></i>日度绝对盈利（盯市）
-                        </h1>
-                        <div class="text-sm text-gray-500"><i class='far fa-clock mr-1'></i>生成时间: {gen_time}</div>
+            <body class="bg-gray-50">
+                <header class="sticky top-0 z-40 bg-white/95 backdrop-blur border-b border-gray-100 shadow-sm">
+                    <div class="max-w-7xl mx-auto px-4 sm:px-6 py-3 flex items-center justify-between">
+                        <div class="flex items-center space-x-2">
+                            <i class="fas fa-money-bill-wave text-[#e53935]"></i>
+                            <div>
+                                <p class="text-[11px] tracking-[0.18em] text-gray-500 uppercase">收益分布</p>
+                                <h1 class="text-xl font-semibold text-gray-900">日收益分布（盯市）</h1>
+                            </div>
+                        </div>
+                        <div class="text-xs text-gray-500 flex items-center"><i class='far fa-clock mr-1'></i>生成时间: {gen_time}</div>
                     </div>
-
-                    <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+                </header>
+                <main class="max-w-7xl mx-auto px-4 sm:px-6 py-6 space-y-6">
+                    <section class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
                         {kpi_cards_html}
-                    </div>
+                    </section>
 
-                    <div id="main_chart_wrap" class="bg-white rounded-xl shadow-sm p-4 border border-gray-100">
-                        <div id="main_chart" class="w-full h-[500px]"></div>
-                    </div>
+                    <section id="main_chart_wrap" class="bg-white rounded-lg shadow-sm p-4 border border-gray-100">
+                        <div id="main_chart" class="w-full h-[520px]"></div>
+                    </section>
 
-                    <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
-                        <div class="bg-white rounded-xl shadow-sm p-6 border-l-4 border-indigo-400">
-                            {cash_html}
+                    <section id="returns_chart_wrap" class="bg-white rounded-lg shadow-sm p-4 border border-gray-100">
+                        <div class="flex items-center justify-between mb-2">
+                            <h2 class="text-lg font-semibold text-gray-900">日收益率分布</h2>
+                            <span class="text-xs text-gray-500">红=盈利区间，绿=亏损区间</span>
                         </div>
-                        <div class="lg:col-span-2 bg-white rounded-xl shadow-sm p-6">
-                            {explain_html}
+                        <div id="returns_chart" class="w-full h-[420px]"></div>
+                    </section>
+
+                    <section class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                        <div class="bg-white rounded-lg shadow-sm p-6 border-l-4 border-indigo-400">
+                            <p class="font-semibold text-gray-900 mb-3 flex items-center"><i class='fas fa-balance-scale text-indigo-500 mr-2'></i>现金一致性校验</p>
+                            <ul class="text-sm text-gray-700 space-y-1">
+                                {cash_list_html}
+                            </ul>
+                            <p class="text-xs text-gray-500 mt-3">公式：cash = NAV - long_value + short_value；偏差过大时需要检查盯市及费用口径。</p>
                         </div>
-                    </div>
-                </div>
+                        <div class="lg:col-span-2 bg-white rounded-lg shadow-sm p-6">
+                            <div id="explain-md" class="prose prose-sm max-w-none"></div>
+                        </div>
+                    </section>
+                </main>
 
                 <script>
                     (function() {{
                         var fig = {fig_json};
+                        var figRet = {fig_ret_json};
                         var config = {json.dumps(config, ensure_ascii=False)};
-                        Plotly.newPlot('main_chart', fig.data, fig.layout, config);
-                        var wrap = document.getElementById('main_chart_wrap');
-                        if (wrap) {{
-                            var scrollToMain = function() {{
-                                try {{
-                                    var rect = wrap.getBoundingClientRect();
-                                    var targetTop = rect.top + window.pageYOffset - 16;
-                                    window.scrollTo({{ top: targetTop, behavior: 'auto' }});
-                                }} catch (e) {{}}
-                            }};
-                            if (document.readyState === 'complete') {{
-                                scrollToMain();
+                        Plotly.newPlot('main_chart', fig.data || [], fig.layout || {{}}, config);
+                        if (figRet) {{
+                            Plotly.newPlot('returns_chart', figRet.data || [], figRet.layout || {{}}, config);
+                        }}
+                        var mdText = {json.dumps(explanation_md, ensure_ascii=False)};
+                        var mdTarget = document.getElementById('explain-md');
+                        if (mdTarget) {{
+                            if (window.marked) {{
+                                mdTarget.innerHTML = marked.parse(mdText);
                             }} else {{
-                                window.addEventListener('load', scrollToMain, {{ once: true }});
+                                mdTarget.textContent = mdText;
                             }}
+                        }}
+                        var anchor = document.getElementById('main_chart_wrap');
+                        if (anchor) {{
+                            requestAnimationFrame(function() {{
+                                anchor.scrollIntoView({{ behavior: 'auto', block: 'start' }});
+                            }});
+                        }}
+                        function typeset() {{
+                            if (window.MathJax && window.MathJax.typesetPromise) {{
+                                window.MathJax.typesetPromise().catch(function(err) {{ console.warn('MathJax error:', err); }});
+                            }}
+                        }}
+                        if (document.readyState === 'complete') {{
+                            typeset();
+                        }} else {{
+                            window.addEventListener('load', typeset, {{ once: true }});
                         }}
                     }})();
                 </script>
@@ -5842,10 +5974,10 @@ class LightweightAnalysis:
             eq_by_mode = {'exit': daily_returns_equal, 'entry': daily_returns_equal}
             amt_by_mode = {'exit': daily_amount_weighted, 'entry': daily_amount_weighted}
         
-        # 方法3: PnL(花出的钱)口径的日收益率：当日盯市PnL / 当日买入成交额
-        print("<i class='fas fa-chart-bar text-indigo-500'></i> 方法3: PnL(花出的钱) = 当日盯市PnL / 当日买入成交额 ...")
+        # 方法3: PnL口径的日收益率：当日盯市PnL / 当日买入成交额
+        print("<i class='fas fa-chart-bar text-indigo-500'></i> 方法3: PnL = 当日盯市PnL / 当日买入成交额 ...")
 
-        # 计算当日买入成交额（花出的钱），只统计方向为B的成交
+        # 计算当日买入成交额（买入成交额），只统计方向为B的成交
         buy_amount_by_date = stock_daily.groupby('date')['buy_amount'].sum()
         buy_amount_by_date.index = pd.to_datetime(buy_amount_by_date.index)
 
@@ -5857,7 +5989,7 @@ class LightweightAnalysis:
             from pathlib import Path
             mtm_file = Path("mtm_analysis_results/daily_nav_revised.csv")
             if mtm_file.exists():
-                print("   <i class='fas fa-check-circle text-green-500'></i> 发现盯市分析结果，按'花出的钱'口径计算PnL收益率")
+                print("   <i class='fas fa-check-circle text-green-500'></i> 发现盯市分析结果，按'买入成交额'口径计算PnL收益率")
                 
                 # 读取盯市数据并解析
                 mtm_df = pd.read_csv(mtm_file)
@@ -5904,7 +6036,7 @@ class LightweightAnalysis:
                 
                 daily_pnl_series = pd.Series(mtm_df['daily_pnl'].values, index=mtm_df['date']).sort_index()
 
-                # 对齐日期并计算 PnL/花出的钱
+                # 对齐日期并计算 PnL/买入成交额
                 aligned = pd.concat([
                     daily_pnl_series.rename('daily_pnl'),
                     buy_amount_by_date.rename('daily_spend')
@@ -5917,9 +6049,9 @@ class LightweightAnalysis:
                 pnl_spend_df = aligned
                 pnl_spend_valid_mask = valid
             else:
-                print("   <i class='fas fa-exclamation-triangle text-yellow-500'></i> 未找到盯市分析结果，无法计算PnL(花出的钱)口径，跳过该方法")
+                print("   <i class='fas fa-exclamation-triangle text-yellow-500'></i> 未找到盯市分析结果，无法计算PnL口径，跳过该方法")
         except Exception as e:
-            print(f"   <i class='fas fa-exclamation-triangle text-yellow-500'></i> 计算PnL(花出的钱)失败: {e}")
+            print(f"   <i class='fas fa-exclamation-triangle text-yellow-500'></i> 计算PnL失败: {e}")
 
         # 若不可用，则用空序列占位，保持后续流程健壮
         if daily_pnl_spend_returns is None:
@@ -5936,9 +6068,9 @@ class LightweightAnalysis:
         print(f"   等权方法: {daily_returns_equal.min():.4f} 到 {daily_returns_equal.max():.4f}, 标准差: {daily_returns_equal.std():.4f}")
         print(f"   金额加权: {daily_amount_weighted.min():.4f} 到 {daily_amount_weighted.max():.4f}, 标准差: {daily_amount_weighted.std():.4f}")
         if len(daily_pnl_spend_returns_clipped) > 0:
-            print(f"   PnL(花出的钱): {daily_pnl_spend_returns_clipped.min():.4f} 到 {daily_pnl_spend_returns_clipped.max():.4f}, 标准差: {daily_pnl_spend_returns_clipped.std():.4f}")
+            print(f"   PnL: {daily_pnl_spend_returns_clipped.min():.4f} 到 {daily_pnl_spend_returns_clipped.max():.4f}, 标准差: {daily_pnl_spend_returns_clipped.std():.4f}")
         else:
-            print(f"   PnL(花出的钱): 无可用数据")
+            print(f"   PnL: 无可用数据")
         
         # 构造DatetimeIndex以便重采样
         daily_returns_dt = daily_returns
@@ -5953,7 +6085,7 @@ class LightweightAnalysis:
             methods_comparison = {
                 '等权收益': daily_returns_equal,
                 '金额加权': daily_amount_weighted, 
-                'PnL(花出的钱)': daily_pnl_spend_returns_clipped
+                'PnL': daily_pnl_spend_returns_clipped
             }
             
             # 1. 日收益率对比图
@@ -6010,7 +6142,7 @@ class LightweightAnalysis:
                 title_sub_map[m] = (
                     f"等权: {eq_by_mode[m].mean()*100:.3f}% | "
                     f"金额加权: {amt_by_mode[m].mean()*100:.3f}% | "
-                    f"PnL(花出): {(daily_pnl_spend_returns_clipped.mean()*100 if len(daily_pnl_spend_returns_clipped) > 0 else 0):.3f}% | "
+                    f"PnL: {(daily_pnl_spend_returns_clipped.mean()*100 if len(daily_pnl_spend_returns_clipped) > 0 else 0):.3f}% | "
                     f"corr({m},PnL)={corr0:.3f}, lag+1={corr_p1:.3f}, lag-1={corr_m1:.3f}"
                 )
 
@@ -6034,10 +6166,10 @@ class LightweightAnalysis:
 <ol>
     <li>对每只 <code>Code</code> 按 <code>Timestamp</code> 先后执行 FIFO 配对：买入(<code>B</code>)与卖出(<code>S</code>)的 <code>tradeQty</code>、<code>tradeAmount</code>、<code>fee</code> 成对，单笔净收益 = 卖出金额 − 买入金额 − 买卖两端 <code>fee</code>，单笔收益率 = 净收益 ÷ 开仓时 <code>tradeAmount</code>。</li>
     <li>按归因日期聚合：平仓日归因使用卖出日，买入日归因使用买入日；分别计算等权均值与以开仓 <code>tradeAmount</code> 为权重的加权均值。</li>
-    <li><b>PnL(花出的钱)</b>：当日盯市盈亏 ÷ 当日买入方向的 <code>tradeAmount</code> 之和（仅分母>0时计算），体现单位现金投放的真实产出。</li>
+    <li><b>PnL</b>：当日盯市盈亏 ÷ 当日买入方向的 <code>tradeAmount</code> 之和（仅分母>0时计算），体现单位现金投放的真实产出。</li>
     <li>曲线超过200个交易日会按时间抽样展示，避免加载过重，所有统计均基于全量数据。</li>
 </ol>
-<div style="margin-top:8px;">解读建议：若金额加权明显低于等权，说明大额交易执行质量不足；PnL(花出的钱)若弱于配对收益，通常由持有期波动或未平仓头寸拖累。</div>
+<div style="margin-top:8px;">解读建议：若金额加权明显低于等权，说明大额交易执行质量不足；PnL若弱于配对收益，通常由持有期波动或未平仓头寸拖累。</div>
 """
             
             # 添加按钮用于切换归因方式
@@ -6065,8 +6197,8 @@ class LightweightAnalysis:
 
             self._save_figure_with_details(fig_returns_comp, 'daily_returns_comparison_light', '日收益率对比（衡量下单质量的三种方法）', comparison_explanation, {})
             
-            # 2. 使用 PnL(花出的钱) 口径的日收益率进行展示
-            print("<i class='fas fa-chart-bar text-indigo-500'></i> 使用PnL(花出的钱)口径的日收益率数据...")
+            # 2. 使用 PnL 口径的日收益率进行展示
+            print("<i class='fas fa-chart-bar text-indigo-500'></i> 使用PnL口径的日收益率数据...")
 
             returns_for_display = None
             data_source_name = ""
@@ -6074,7 +6206,7 @@ class LightweightAnalysis:
 
             if 'daily_pnl_spend_returns_clipped' in locals() and len(daily_pnl_spend_returns_clipped) > 0:
                 returns_for_display = daily_pnl_spend_returns_clipped
-                data_source_name = "PnL(花出的钱)"
+                data_source_name = "PnL"
                 calculation_method = "当日盯市PnL ÷ 当日买入成交额（仅分母>0日）"
             else:
                 # 回退：等权日收益率
@@ -6111,8 +6243,8 @@ class LightweightAnalysis:
             )
             
             # 直接计算关键指标，避免数据裁剪导致的不一致
-            # 指标计算：若采用 PnL(花出的钱) 口径，则不使用复利“总收益率/年化收益率”，改为现金效率指标
-            use_spend_ratio = (data_source_name == "PnL(花出的钱)")
+            # 指标计算：若采用 PnL 口径，则不使用复利“总收益率/年化收益率”，改为现金效率指标
+            use_spend_ratio = (data_source_name == "PnL")
 
             if use_spend_ratio and pnl_spend_df is not None and pnl_spend_valid_mask is not None:
                 valid_df = pnl_spend_df.loc[pnl_spend_valid_mask].copy()
@@ -6221,7 +6353,7 @@ class LightweightAnalysis:
             # 计算三种方法的累积收益和统计数据
             methods_data = {}
             for method_name, returns_series in methods_comparison.items():
-                # 等权/金额加权：按复利累计；PnL(花出的钱)：按累计资金效率(ΣPnL/ΣSpend)
+                # 等权/金额加权：按复利累计；PnL：按累计资金效率(ΣPnL/ΣSpend)
                 if 'PnL' in method_name and (
                     'pnl_spend_df' in locals() and pnl_spend_df is not None and
                     'pnl_spend_valid_mask' in locals() and pnl_spend_valid_mask is not None and
@@ -6257,7 +6389,7 @@ class LightweightAnalysis:
                     }
             
             # 检查按暴露PnL是否需要单独显示
-            pnl_final = methods_data['PnL(花出的钱)']['final']
+            pnl_final = methods_data['PnL']['final']
             other_finals = [methods_data[k]['final'] for k in ['等权收益', '金额加权']]
             max_other = max(abs(f) for f in other_finals)
             
@@ -6296,7 +6428,7 @@ class LightweightAnalysis:
                     )
                 
                 # 子图2：按暴露PnL方法
-                pnl_cum = methods_data['PnL(花出的钱)']['cumulative']
+                pnl_cum = methods_data['PnL']['cumulative']
                 if len(pnl_cum) > 200:
                     step = len(pnl_cum) // 150
                     pnl_sampled = pnl_cum.iloc[::step]
@@ -6355,7 +6487,7 @@ class LightweightAnalysis:
                     ))
                 
                 fig_cum_comp.update_layout(
-                    title=f'累积收益对比<br><sub>等权: {methods_data["等权收益"]["final"]*100:.2f}% | 金额加权: {methods_data["金额加权"]["final"]*100:.2f}% | PnL(花出的钱): {pnl_final*100:.2f}%</sub>',
+                    title=f'累积收益对比<br><sub>等权: {methods_data["等权收益"]["final"]*100:.2f}% | 金额加权: {methods_data["金额加权"]["final"]*100:.2f}% | PnL: {pnl_final*100:.2f}%</sub>',
                     xaxis_title='日期',
                     yaxis_title='累积收益率 (%)',
                     height=450,
@@ -6391,7 +6523,7 @@ class LightweightAnalysis:
                 <li><b>局限</b>：同样仅包含已平仓交易</li>
             </ul>
             
-            <h5>方法3：PnL(花出的钱)（期末 {pnl_total*100:.2f}%）</h5>
+            <h5>方法3：PnL（期末 {pnl_total*100:.2f}%）</h5>
             <ul>
                 <li><b>数据来源</b>：从盯市文件读取每日总资产，计算总资产差分得到当日盈亏</li>
                 <li><b>分母定义</b>：当日 <code>direction</code> 为 <code>B</code> 的所有 <code>tradeAmount</code> 之和（当日买入总额）</li>
@@ -6411,8 +6543,8 @@ class LightweightAnalysis:
             <h4><i class='fas fa-book-open text-gray-500'></i> 解读建议</h4>
             <ul>
                 <li><b>方法接近</b>：当三条曲线趋势一致时，说明策略收益结构稳健，已平仓与未平仓收益方向一致</li>
-                <li><b>方法分离</b>：若PnL(花出的钱)显著偏离，可能是未平仓浮动盈亏较大，或当日资金投入与平仓节奏不匹配</li>
-                <li><b>建议组合使用</b>：等权看选股能力，金额加权看配置效率，PnL(花出的钱)看真实回报</li>
+                <li><b>方法分离</b>：若PnL显著偏离，可能是未平仓浮动盈亏较大，或当日资金投入与平仓节奏不匹配</li>
+                <li><b>建议组合使用</b>：等权看选股能力，金额加权看配置效率，PnL看真实回报</li>
             </ul>
             """
             
@@ -6431,6 +6563,7 @@ class LightweightAnalysis:
                 # 默认使用当前计算的策略累积收益
                 strategy_cum_for_bench = cumulative_returns
                 daily_returns_for_bench = daily_returns
+                strategy_daily_for_plot = daily_amount_weighted
 
                 # 使用盯市分析的日度绝对盈利数据
                 try:
@@ -6509,28 +6642,27 @@ class LightweightAnalysis:
                         # 以真实净值收益口径对基准图及指标进行对齐
                         strategy_cum_for_bench = cumulative_return_nav
                         daily_returns_for_bench = daily_return_nav
-                        daily_abs_profit_for_bench = daily_abs_profit  # 仍可在图中展示日绝对盈利
                         
                     else:
                         print(f"<i class='fas fa-exclamation-triangle text-yellow-500'></i> 未找到盯市分析结果文件，使用默认策略收益")
-                        daily_abs_profit_for_bench = None
                         
                 except Exception as e:
                     print(f"<i class='fas fa-exclamation-triangle text-yellow-500'></i> 读取盯市分析结果失败: {e}")
                     import traceback
                     traceback.print_exc()
-                    daily_abs_profit_for_bench = None
 
                 fig_strategy_vs_benchmark = self._create_strategy_benchmark_comparison(
-                    strategy_cum_for_bench, 
-                    daily_abs_profit=daily_abs_profit_for_bench
+                    strategy_cum_for_bench,
+                    strategy_daily_returns=strategy_daily_for_plot
                 )
 
                 self._save_figure_with_details(
                     fig_strategy_vs_benchmark,
                     name='strategy_vs_benchmark_light',
                     title='策略vs基准指数累积收益对比',
-                    explanation_html="<p>对比策略与市场主要指数的累积收益表现，评估策略的相对价值。基准包括创业板指数、深证成指等与数据集标的构成匹配的指数。</p>",
+                    explanation_html="""
+<p>左轴展示策略金额加权日收益率（来源：<b>日收益率对比</b>页面的“金额加权”口径）与各基准指数日收益率，便于逐日对照策略相对强弱；右轴保留策略/指数累积收益率（策略曲线默认隐藏，可按需展开）。基准按交易日对齐，均基于日收盘价计算。</p>
+""",
                     metrics=self._calculate_benchmark_comparison_metrics(strategy_cum_for_bench, daily_returns_for_bench)
                 )
             
@@ -7080,212 +7212,170 @@ class LightweightAnalysis:
             
         return metrics
         
-    def _create_strategy_benchmark_comparison(self, strategy_cumulative, daily_abs_profit=None):
-        """创建策略vs基准对比图表"""
+    def _create_strategy_benchmark_comparison(self, strategy_cumulative, strategy_daily_returns=None):
+        """创建策略vs基准对比图表（左轴为日收益率，右轴为累积收益率）"""
         fig = go.Figure()
-        
-        # 准备策略数据用于对比
-        strategy_dates = strategy_cumulative.index
-        
-        # 检查策略数据类型：是绝对盈利（元）还是收益率（小数）
-        is_absolute_profit = strategy_cumulative.abs().mean() > 1000  # 如果平均值大于1000，认为是绝对盈利
-        
-        # 策略累积数据曲线
-        if len(strategy_cumulative) > 200:
-            step = len(strategy_cumulative) // 150
-            strategy_sampled = strategy_cumulative.iloc[::step]
-        else:
-            strategy_sampled = strategy_cumulative
-            
-        x_strategy = [ts.isoformat() if hasattr(ts, 'isoformat') else str(ts) for ts in strategy_sampled.index]
-        
-        if is_absolute_profit:
-            # 绝对盈利数据，以元为单位
-            y_strategy = [float(v) for v in strategy_sampled.values]
-            strategy_name = '策略累积盈利'
-            strategy_hover = '日期: %{x}<br>累积盈利: ¥%{y:,.0f}<extra></extra>'
-        else:
-            # 收益率数据，转换为百分比
-            y_strategy = [float(v) * 100.0 for v in strategy_sampled.values]
-            strategy_name = '策略收益'
-            strategy_hover = '日期: %{x}<br>策略收益: %{y:.2f}%<extra></extra>'
-        
-        # 在“绝对盈利 + 存在日绝对盈利”时，稍后添加策略曲线（置于日绝对盈利之后且默认隐藏）
-        if not (is_absolute_profit and daily_abs_profit is not None and len(daily_abs_profit) > 0):
-            fig.add_trace(go.Scatter(
-                x=x_strategy,
-                y=y_strategy,
-                mode='lines',
-                name=strategy_name,
-                line=dict(color='red', width=3),
-                hovertemplate=strategy_hover,
-                yaxis='y1'
-            ))
-        
-        # 添加日绝对盈利曲线（如果提供了数据）
-        if daily_abs_profit is not None and len(daily_abs_profit) > 0:
-            # 对日绝对盈利数据进行采样
-            if len(daily_abs_profit) > 200:
-                step = len(daily_abs_profit) // 150
-                daily_profit_sampled = daily_abs_profit.iloc[::step]
-            else:
-                daily_profit_sampled = daily_abs_profit
-                
-            x_daily = [ts.isoformat() if hasattr(ts, 'isoformat') else str(ts) for ts in daily_profit_sampled.index]
-            y_daily = [float(v) for v in daily_profit_sampled.values]
-            
-            # 交换图例顺序与样式：日绝对盈利为红色实线；策略累积绝对盈利为深红虚线并默认隐藏
-            fig.add_trace(go.Scatter(
-                x=x_daily,
-                y=y_daily,
-                mode='lines',
-                name='日绝对盈利',
-                line=dict(color='red', width=2),
-                hovertemplate='日期: %{x}<br>日盈利: ¥%{y:,.0f}<extra></extra>',
-                yaxis='y3'
-            ))
 
-            if is_absolute_profit:
-                fig.add_trace(go.Scatter(
-                    x=x_strategy,
-                    y=y_strategy,
-                    mode='lines',
-                    name=strategy_name,
-                    line=dict(color='darkred', width=2, dash='dash'),
-                    hovertemplate=strategy_hover,
-                    yaxis='y1',
-                    visible='legendonly'
-            ))
-        
-        # 基准指数曲线
+        # 归一化策略累积收益
+        strategy_cum_series = pd.Series(strategy_cumulative).dropna().sort_index()
+
+        # 策略金额加权日收益率（来自“日收益率对比”页面）
+        strategy_daily_series = None
+        if strategy_daily_returns is not None:
+            try:
+                strategy_daily_series = pd.Series(strategy_daily_returns).dropna()
+                strategy_daily_series.index = pd.to_datetime(strategy_daily_series.index)
+                strategy_daily_series = strategy_daily_series.sort_index()
+            except Exception:
+                strategy_daily_series = None
+
+        anchor_dates: set = set()
+        if strategy_daily_series is not None and len(strategy_daily_series) > 0:
+            anchor_dates = set(pd.to_datetime(strategy_daily_series.index).date)
+        elif len(strategy_cum_series) > 0:
+            anchor_dates = set(pd.to_datetime(strategy_cum_series.index).date)
+
+        def _sample_series(series: pd.Series, max_points: int = 150) -> pd.Series:
+            if len(series) > max_points:
+                step = max(1, len(series) // max_points)
+                return series.iloc[::step]
+            return series
+
+        bench_traces = []
+
+        # 基准指数：左轴日收益率 + 右轴累积收益率（先收集，后统一添加，使策略曲线位于顶部）
         bench_min_val = None
         bench_max_val = None
-        colors = ['blue', 'green', 'orange', 'purple']
+        colors = ['#1f77b4', '#2ca02c', '#ff7f0e', '#9467bd', '#17becf']
         for i, (bench_name, bench_df) in enumerate(self.benchmark_data.items()):
             if i >= len(colors):
                 break
-                
-            # 对齐日期：只使用与策略重叠的交易日
-            bench_df_aligned = bench_df[bench_df['date'].isin([d.date() if hasattr(d, 'date') else d for d in strategy_dates])]
-            
-            if len(bench_df_aligned) > 0:
-                if len(bench_df_aligned) > 200:
-                    step = len(bench_df_aligned) // 150
-                    bench_sampled = bench_df_aligned.iloc[::step]
-                else:
-                    bench_sampled = bench_df_aligned
-                    
-                x_bench = [str(d) for d in bench_sampled['date']]
-                y_bench = [float(v) * 100.0 for v in bench_sampled['cumulative_return']]
-                
-                # 收集基准最小/最大值用于零点对齐（使用未采样数据以更准确）
-                full_y_bench = [float(v) * 100.0 for v in bench_df_aligned['cumulative_return']]
-                if len(full_y_bench) > 0:
-                    bmin = min(full_y_bench)
-                    bmax = max(full_y_bench)
-                    bench_min_val = bmin if bench_min_val is None else min(bench_min_val, bmin)
-                    bench_max_val = bmax if bench_max_val is None else max(bench_max_val, bmax)
 
-                fig.add_trace(go.Scatter(
-                    x=x_bench,
-                    y=y_bench,
-                    mode='lines',
-                    name=bench_name,
-                    line=dict(color=colors[i], width=2),
-                    hovertemplate=f'日期: %{{x}}<br>{bench_name}: %{{y:.2f}}%<extra></extra>',
-                    yaxis='y2'  # 使用次Y轴
-                ))
-        
-        # 更新布局
-        if is_absolute_profit:
-            strategy_final_display = strategy_cumulative.iloc[-1]
-            title_subtitle = f'累积盈利: ¥{strategy_final_display:,.0f}'
-            yaxis_title = '累积盈利 (¥)'
-        else:
-            strategy_final_display = strategy_cumulative.iloc[-1] * 100
-            title_subtitle = f'策略总收益: {strategy_final_display:.2f}%'
-            yaxis_title = '累积收益率 (%)'
-            
-        # 构建布局配置
+            bench_df_local = bench_df.copy()
+            bench_df_local['date'] = pd.to_datetime(bench_df_local['date'])
+            if anchor_dates:
+                bench_df_local = bench_df_local[bench_df_local['date'].dt.date.isin(anchor_dates)]
+            bench_df_local = bench_df_local.sort_values('date')
+            if len(bench_df_local) == 0:
+                continue
+
+            # 日收益率
+            daily_series = pd.Series(bench_df_local['daily_return'].values, index=bench_df_local['date']).dropna()
+            daily_sampled = _sample_series(daily_series)
+            x_bench_daily = [ts.isoformat() if hasattr(ts, 'isoformat') else str(ts) for ts in daily_sampled.index]
+            y_bench_daily = [float(v) * 100.0 for v in daily_sampled.values]
+            bench_traces.append(go.Scatter(
+                x=x_bench_daily,
+                y=y_bench_daily,
+                mode='lines',
+                name=f'{bench_name}日收益率',
+                line=dict(color=colors[i], width=1.6),
+                opacity=0.65,
+                hovertemplate=f'日期: %{{x}}<br>{bench_name}日收益率: %{{y:.2f}}%<extra></extra>',
+                yaxis='y'
+            ))
+
+            # 累积收益率
+            cum_series = pd.Series(bench_df_local['cumulative_return'].values, index=bench_df_local['date']).dropna()
+            daily_full_cum = cum_series * 100.0
+            if len(daily_full_cum) > 0:
+                bmin = float(daily_full_cum.min())
+                bmax = float(daily_full_cum.max())
+                bench_min_val = bmin if bench_min_val is None else min(bench_min_val, bmin)
+                bench_max_val = bmax if bench_max_val is None else max(bench_max_val, bmax)
+
+            cum_sampled = _sample_series(daily_full_cum)
+            x_bench_cum = [ts.isoformat() if hasattr(ts, 'isoformat') else str(ts) for ts in cum_sampled.index]
+            y_bench_cum = [float(v) for v in cum_sampled.values]
+            bench_traces.append(go.Scatter(
+                x=x_bench_cum,
+                y=y_bench_cum,
+                mode='lines',
+                name=f'{bench_name}累积收益',
+                line=dict(color=colors[i], width=2, dash='dash'),
+                opacity=0.65,
+                hovertemplate=f'日期: %{{x}}<br>{bench_name}累积收益: %{{y:.2f}}%<extra></extra>',
+                yaxis='y2'
+            ))
+
+        # 策略金额加权日收益率（左轴，置于顶部）
+        if strategy_daily_series is not None and len(strategy_daily_series) > 0:
+            sampled_daily = _sample_series(strategy_daily_series)
+            x_daily = [ts.isoformat() if hasattr(ts, 'isoformat') else str(ts) for ts in sampled_daily.index]
+            y_daily = [float(v) * 100.0 for v in sampled_daily.values]
+            fig.add_trace(go.Scatter(
+                x=x_daily,
+                y=y_daily,
+                mode='lines+markers',
+                name='策略日收益率（金额加权）',
+                line=dict(color='firebrick', width=2.8),
+                marker=dict(size=4, color='firebrick'),
+                hovertemplate='日期: %{x}<br>日收益率: %{y:.2f}%<extra></extra>',
+                yaxis='y',
+                legendrank=0
+            ))
+
+        # 将基准曲线添加到底层
+        for tr in bench_traces:
+            fig.add_trace(tr)
+
+        # 策略累积收益曲线（默认隐藏，右轴显示，置于最上层但 legendonly）
+        if len(strategy_cum_series) > 0:
+            strat_cum_pct = strategy_cum_series.astype(float) * 100.0
+            sampled_cum = _sample_series(strat_cum_pct)
+            x_cum = [ts.isoformat() if hasattr(ts, 'isoformat') else str(ts) for ts in sampled_cum.index]
+            y_cum = [float(v) for v in sampled_cum.values]
+            fig.add_trace(go.Scatter(
+                x=x_cum,
+                y=y_cum,
+                mode='lines',
+                name='策略累积收益',
+                line=dict(color='red', width=3),
+                hovertemplate='日期: %{x}<br>累积收益: %{y:.2f}%<extra></extra>',
+                yaxis='y2',
+                visible='legendonly',
+                legendrank=1
+            ))
+
+        # 将策略累积收益纳入右轴范围考量
+        if len(strategy_cum_series) > 0:
+            strat_cum_pct_full = strategy_cum_series.astype(float) * 100.0
+            if bench_min_val is None or bench_max_val is None:
+                bench_min_val = float(strat_cum_pct_full.min())
+                bench_max_val = float(strat_cum_pct_full.max())
+            else:
+                bench_min_val = min(bench_min_val, float(strat_cum_pct_full.min()))
+                bench_max_val = max(bench_max_val, float(strat_cum_pct_full.max()))
+
+        # 布局设置
+        strategy_final_display = strategy_cum_series.iloc[-1] * 100 if len(strategy_cum_series) > 0 else 0.0
         layout_config = {
-            'title': f'策略vs基准指数对比<br><sub>{title_subtitle}</sub>',
+            'title': f'策略vs基准指数对比<br><sub>策略总收益: {strategy_final_display:.2f}%</sub>',
             'xaxis_title': '日期',
-            'yaxis_title': yaxis_title,
+            'yaxis_title': '收益率 (%)',
+            'yaxis': dict(showgrid=True, zeroline=True, tickformat='.1f'),
             'yaxis2': dict(
-                title='基准指数累积收益率 (%)',
+                title='累积收益率 (%)',
                 overlaying='y',
                 side='right',
                 showgrid=False
             ),
-            'height': 500,
+            'height': 520,
             'hovermode': 'x unified',
-            'legend': dict(x=0.02, y=0.98),
+            'legend': dict(x=0.01, y=0.99),
             'xaxis': dict(type='date')
         }
-        
-        # 如果有日绝对盈利数据，添加第三Y轴
-        if daily_abs_profit is not None and len(daily_abs_profit) > 0:
-            layout_config['yaxis3'] = dict(
-                title='日绝对盈利 (¥)',
-                overlaying='y',
-                side='right',
-                position=0.95,  # 稍微向内偏移，避免与yaxis2重叠
-                showgrid=False,
-                tickformat=',.0f'
-            )
 
-        # 绝对盈利场景：将策略绝对盈利与日绝对盈利的零点与基准零点对齐
-        if is_absolute_profit:
-            # 基准轴范围（确保包含0）
-            if bench_min_val is None or bench_max_val is None:
-                bench_min_val, bench_max_val = -1.0, 1.0
+        # 右轴范围包含零点，便于快速感知基准表现
+        if bench_min_val is not None and bench_max_val is not None:
             bench_min_val = min(bench_min_val, 0.0)
             bench_max_val = max(bench_max_val, 0.0)
             if bench_max_val <= bench_min_val:
                 bench_max_val = bench_min_val + 1.0
-            zero_frac = (0.0 - bench_min_val) / (bench_max_val - bench_min_val)
-
-            def _aligned_range(data_min: float, data_max: float, z: float):
-                # 计算使零点位于与基准相同像素位置的轴范围
-                z = max(1e-6, min(1 - 1e-6, z))
-                data_min = min(float(data_min), 0.0)
-                data_max = max(float(data_max), 0.0)
-                U = max(1e-9, data_max)
-                L = z / (1.0 - z) * U
-                if L < abs(data_min):
-                    scale = (abs(data_min) / L) if L > 0 else 1.0
-                    L *= scale
-                    U *= scale
-                if U < data_max:
-                    scale = (data_max / U) if U > 0 else 1.0
-                    L *= scale
-                    U *= scale
-                return [-L, U]
-
-            # 策略主轴范围
-            strategy_min = float(strategy_cumulative.min())
-            strategy_max = float(strategy_cumulative.max())
-            layout_config['yaxis'] = dict(
-                title=yaxis_title,
-                range=_aligned_range(strategy_min, strategy_max, zero_frac),
-                zeroline=True
-            )
-
-            # 基准轴范围
             layout_config['yaxis2']['range'] = [bench_min_val, bench_max_val]
             layout_config['yaxis2']['zeroline'] = True
 
-            # 第三轴（日绝对盈利）范围
-            if daily_abs_profit is not None and len(daily_abs_profit) > 0:
-                daily_min = float(daily_abs_profit.min())
-                daily_max = float(daily_abs_profit.max())
-                if 'yaxis3' not in layout_config:
-                    layout_config['yaxis3'] = dict(title='日绝对盈利 (¥)', overlaying='y', side='right', position=0.95, showgrid=False, tickformat=',.0f')
-                layout_config['yaxis3']['range'] = _aligned_range(daily_min, daily_max, zero_frac)
-                layout_config['yaxis3']['zeroline'] = True
-        
         fig.update_layout(**layout_config)
-        
         return fig
         
     def _calculate_benchmark_comparison_metrics(self, strategy_cumulative, strategy_daily_returns):

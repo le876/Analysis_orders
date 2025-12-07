@@ -344,6 +344,11 @@ else:
     pairs['open_price'] = pairs['buy_price'].where(~short_mask, pairs['sell_price'])
     pairs['close_price'] = pairs['sell_price'].where(~short_mask, pairs['buy_price'])
     pairs['holding_minutes_trading'] = [trading_minutes(o, c) for o, c in zip(pairs['open_timestamp'], pairs['close_timestamp'])]
+
+    # 计算同一标的的前一平仓 / 下一开仓，用于窗口裁剪
+    pairs = pairs.sort_values(['code', 'open_timestamp']).reset_index(drop=True)
+    pairs['prev_close_ts'] = pairs.groupby('code')['close_timestamp'].shift(1)
+    pairs['next_open_ts'] = pairs.groupby('code')['open_timestamp'].shift(-1)
     pairs_group = {c: g for c, g in pairs.groupby('code')}
 
     # 按标的构建日期范围，按交易条数排序
@@ -419,15 +424,34 @@ else:
             fees = float((row.get('buy_fee', 0) or 0) + (row.get('sell_fee', 0) or 0))
             notional_in = row['open_price'] * qty
             pnl = ((row['close_price'] - row['open_price']) * qty if row['trade_type'] != 'short' else (row['open_price'] - row['close_price']) * qty) - fees
+            # 边界裁剪：避免跨越前一平仓和下一开仓
+            prev_close = row.get('prev_close_ts')
+            next_open = row.get('next_open_ts')
 
-            es = md.loc[(md.index >= row['open_timestamp']) & (md.index <= row['open_timestamp'] + timedelta(minutes=T_GLOBAL))]
+            def apply_bounds(start_ts, end_ts):
+                if pd.notna(prev_close):
+                    start_ts = max(start_ts, prev_close)
+                if pd.notna(next_open):
+                    end_ts = min(end_ts, next_open)
+                return start_ts, end_ts
+
+            # Entry 窗口：开仓 -> 平仓，全程内的相对位置
+            e_start = row['open_timestamp']
+            e_end = row['close_timestamp']
+            e_start, e_end = apply_bounds(e_start, e_end)
+            es = md.loc[(md.index >= e_start) & (md.index <= e_end)]
             if not es.empty:
                 lo, hi = es['low'].min(), es['high'].max()
                 er = 0.5 if hi == lo else ((hi - row['open_price']) / (hi - lo) if row['trade_type'] == 'short' else (row['open_price'] - lo) / (hi - lo))
                 res["entries_g"].append(er)
                 res["entries_g_notional"].append((er, notional_in))
                 res["entries_g_pnl"].append((er, max(pnl, 0)))
-            xs = md.loc[(md.index >= row['close_timestamp']) & (md.index <= row['close_timestamp'] + timedelta(minutes=T_GLOBAL))]
+
+            # Exit 窗口：开仓 -> 平仓后 T/2（物理分钟）
+            x_start = row['open_timestamp']
+            x_end = row['close_timestamp'] + timedelta(minutes=T_GLOBAL / 2)
+            x_start, x_end = apply_bounds(x_start, x_end)
+            xs = md.loc[(md.index >= x_start) & (md.index <= x_end)]
             if not xs.empty:
                 lo2, hi2 = xs['low'].min(), xs['high'].max()
                 xr = 0.5 if hi2 == lo2 else ((row['close_price'] - lo2) / (hi2 - lo2) if row['trade_type'] == 'short' else (hi2 - row['close_price']) / (hi2 - lo2))
@@ -449,14 +473,20 @@ else:
                 res["edges_g_pnl"].append((edge, max(pnl, 0)))
 
             if row['holding_minutes_trading'] <= 10:
-                es_s = md.loc[(md.index >= row['open_timestamp']) & (md.index <= row['open_timestamp'] + timedelta(minutes=T_SHORT))]
+                e_start_s = row['open_timestamp']
+                e_end_s = row['close_timestamp']
+                e_start_s, e_end_s = apply_bounds(e_start_s, e_end_s)
+                es_s = md.loc[(md.index >= e_start_s) & (md.index <= e_end_s)]
                 if not es_s.empty:
                     loS, hiS = es_s['low'].min(), es_s['high'].max()
                     er_s = 0.5 if hiS == loS else ((hiS - row['open_price']) / (hiS - loS) if row['trade_type'] == 'short' else (row['open_price'] - loS) / (hiS - loS))
                     res["entries_s"].append(er_s)
                     res["entries_s_notional"].append((er_s, notional_in))
                     res["entries_s_pnl"].append((er_s, max(pnl, 0)))
-                xs_s = md.loc[(md.index >= row['close_timestamp']) & (md.index <= row['close_timestamp'] + timedelta(minutes=T_SHORT))]
+                x_start_s = row['open_timestamp']
+                x_end_s = row['close_timestamp'] + timedelta(minutes=T_SHORT / 2)
+                x_start_s, x_end_s = apply_bounds(x_start_s, x_end_s)
+                xs_s = md.loc[(md.index >= x_start_s) & (md.index <= x_end_s)]
                 if not xs_s.empty:
                     loS2, hiS2 = xs_s['low'].min(), xs_s['high'].max()
                     xr_s = 0.5 if hiS2 == loS2 else ((row['close_price'] - loS2) / (hiS2 - loS2) if row['trade_type'] == 'short' else (hiS2 - row['close_price']) / (hiS2 - loS2))
@@ -792,7 +822,9 @@ script_block = f"""
 
 REPORT_HTML.parent.mkdir(parents=True, exist_ok=True)
 
-html_text = f"""<!DOCTYPE html>
+
+
+html_template = r"""<!DOCTYPE html>
 <html lang="zh-CN">
 <head>
   <meta charset="UTF-8">
@@ -800,12 +832,30 @@ html_text = f"""<!DOCTYPE html>
   <title>择时能力分布（baostock 5min，全量）</title>
   <script src="https://cdn.tailwindcss.com"></script>
   <script src="https://cdn.plot.ly/plotly-2.27.1.min.js"></script>
+  <!-- MathJax for LaTeX rendering -->
+  <script>
+    window.MathJax = {
+      tex: {
+        inlineMath: [['$', '$'], ['\\(', '\\)']],
+        displayMath: [['$$', '$$'], ['\\[', '\\]']],
+        processEscapes: true
+      },
+      options: {
+        ignoreHtmlClass: 'tex2jax_ignore',
+        processHtmlClass: 'tex2jax_process'
+      }
+    };
+  </script>
+  <script id="MathJax-script" async src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-chtml.js"></script>
   <style>
-    body {{ font-family: "Noto Sans SC", "Inter", "Helvetica", "Arial", sans-serif; }}
-    .mode-btn {{ padding: 6px 10px; border-radius: 999px; font-size: 13px; border: 1px solid #e2e8f0; background: #f8fafc; color: #475569; cursor: pointer; }}
-    .mode-btn:hover {{ background: #eef2ff; }}
-    .mode-btn.active {{ background: #eef2ff; color: #4338ca; border-color: #c7d2fe; }}
-    .mode-chart {{ width: 100%; }}
+    body { font-family: "Noto Sans SC", "Inter", "Helvetica", "Arial", sans-serif; }
+    .mode-btn { padding: 6px 10px; border-radius: 999px; font-size: 13px; border: 1px solid #e2e8f0; background: #f8fafc; color: #475569; cursor: pointer; }
+    .mode-btn:hover { background: #eef2ff; }
+    .mode-btn.active { background: #eef2ff; color: #4338ca; border-color: #c7d2fe; }
+    .mode-chart { width: 100%; }
+    .math-block { text-align: left; margin: 6px 0; }
+    /* Fix MathJax font size in Tailwind context */
+    mjx-container { font-size: 1.1em !important; }
   </style>
 </head>
 <body>
@@ -816,85 +866,120 @@ html_text = f"""<!DOCTYPE html>
           <div class="text-xs font-semibold text-indigo-600">交易执行分析</div>
           <h1 class="text-xl font-bold text-slate-900">择时能力分布（Entry/Exit Rank）</h1>
         </div>
-        <div class="text-[11px] text-slate-500 text-right leading-tight">行情：baostock 5min<br/>窗口：全体 Tα={T_GLOBAL_USE} 分钟｜超短 Tα={T_SHORT_USE} 分钟</div>
+        <div class="text-[11px] text-slate-500 text-right leading-tight">行情：baostock 5min<br/>窗口：全体 Tα=__T_GLOBAL__ 分钟｜超短 Tα=__T_SHORT__ 分钟</div>
       </div>
     </header>
 
     <div class="max-w-7xl mx-auto p-6 space-y-6">
       <div class="rounded-2xl border border-slate-200 bg-white shadow-sm p-5">
         <div class="text-sm text-slate-700 leading-relaxed">
-          - 目标：评估买入/卖出点在后续 5 分钟行情窗口内的相对位置，诊断择时优劣。<br/>
+          - 目标：评估买入/卖出点在后续 Tα 分钟行情窗口内的相对位置，诊断择时优劣。<br/>
           - Rank∈[0,1]：越接近 0 表示更优（买得更低 / 卖得更高），空头已镜像为可比方向。<br/>
-          - 口径：全体交易窗口 Tα={T_GLOBAL_USE} 分钟；超短单（持仓≤10 分钟）窗口 Tα={T_SHORT_USE} 分钟。
+          - 口径：全体交易窗口 Tα=__T_GLOBAL__ 分钟；超短单（持仓≤10 分钟）窗口 Tα=__T_SHORT__ 分钟。
         </div>
       </div>
 
       <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         <div class="rounded-2xl border border-green-200 bg-green-50 shadow-sm p-4">
           <div class="text-xs font-semibold text-green-700 uppercase tracking-wide">全体 Entry 均值</div>
-          <div class="text-2xl font-bold text-green-800 mt-1">{format_two_decimals(stats_e_g.get('mean') if stats_e_g else None)}</div>
+          <div class="text-2xl font-bold text-green-800 mt-1">__STATS_E_G_MEAN__</div>
           <div class="text-sm text-green-700 mt-1">越低越好，随机基准 ≈ 0.50</div>
         </div>
         <div class="rounded-2xl border border-red-200 bg-red-50 shadow-sm p-4">
           <div class="text-xs font-semibold text-red-700 uppercase tracking-wide">全体 Exit 均值</div>
-          <div class="text-2xl font-bold text-red-800 mt-1">{format_two_decimals(stats_x_g.get('mean') if stats_x_g else None)}</div>
+          <div class="text-2xl font-bold text-red-800 mt-1">__STATS_X_G_MEAN__</div>
           <div class="text-sm text-red-700 mt-1">越低越好，随机基准 ≈ 0.50</div>
         </div>
         <div class="rounded-2xl border border-green-200 bg-white shadow-sm p-4">
           <div class="text-xs font-semibold text-green-700 uppercase tracking-wide">完美买入占比 (Rank&lt;0.1)</div>
-          <div class="text-2xl font-bold text-slate-900 mt-1">{format_pct(perfect_e)}</div>
+          <div class="text-2xl font-bold text-slate-900 mt-1">__PERFECT_E__</div>
           <div class="text-sm text-slate-500 mt-1">随机基准 ≈ 10%</div>
         </div>
         <div class="rounded-2xl border border-red-200 bg-white shadow-sm p-4">
           <div class="text-xs font-semibold text-red-700 uppercase tracking-wide">完美卖出占比 (Rank&lt;0.1)</div>
-          <div class="text-2xl font-bold text-slate-900 mt-1">{format_pct(perfect_x)}</div>
+          <div class="text-2xl font-bold text-slate-900 mt-1">__PERFECT_X__</div>
           <div class="text-sm text-slate-500 mt-1">随机基准 ≈ 10%</div>
         </div>
       </div>
 
       <a id="charts"></a>
       <div class="space-y-4">
-        {charts_html}
+        __CHARTS_HTML__
         <div class="grid grid-cols-2 sm:grid-cols-4 gap-3">
           <div class="rounded-xl border border-slate-200 bg-white px-3 py-2">
             <div class="text-xs text-slate-500">全体 Entry 样本</div>
-            <div class="text-lg font-semibold text-slate-900">{sample_counts.get('entries_g', 0):,}</div>
+            <div class="text-lg font-semibold text-slate-900">__SAMPLE_E_G__</div>
           </div>
           <div class="rounded-xl border border-slate-200 bg-white px-3 py-2">
             <div class="text-xs text-slate-500">全体 Exit 样本</div>
-            <div class="text-lg font-semibold text-slate-900">{sample_counts.get('exits_g', 0):,}</div>
+            <div class="text-lg font-semibold text-slate-900">__SAMPLE_X_G__</div>
           </div>
           <div class="rounded-xl border border-slate-200 bg-white px-3 py-2">
             <div class="text-xs text-slate-500">超短 Entry 样本</div>
-            <div class="text-lg font-semibold text-slate-900">{sample_counts.get('entries_s', 0):,}</div>
+            <div class="text-lg font-semibold text-slate-900">__SAMPLE_E_S__</div>
           </div>
           <div class="rounded-xl border border-slate-200 bg-white px-3 py-2">
             <div class="text-xs text-slate-500">超短 Exit 样本</div>
-            <div class="text-lg font-semibold text-slate-900">{sample_counts.get('exits_s', 0):,}</div>
+            <div class="text-lg font-semibold text-slate-900">__SAMPLE_X_S__</div>
           </div>
         </div>
         <p class="text-sm text-slate-600 leading-relaxed">
-          说明：Rank 以交易后续 5 分钟行情区间的相对位置度量；全体/超短分别使用 Tα={T_GLOBAL_USE}/{T_SHORT_USE} 分钟窗口，空头已镜像，便于与多头可比。
+          说明：Rank 以交易后续 5 分钟行情区间的相对位置度量；全体/超短分别使用 Tα=__T_GLOBAL__/__T_SHORT__ 分钟窗口，空头已镜像，便于与多头可比。
         </p>
       </div>
 
-      <div class="rounded-2xl border border-slate-200 bg-white shadow-sm p-4 space-y-2">
-        <div class="text-base font-semibold text-slate-900">页面目的</div>
-        <p class="text-slate-700 leading-relaxed">衡量买入/卖出点相对于窗口内极值的位置，快速判断策略在不同持仓时长（全体、超短）下的择时是否优于随机基准。</p>
-        <div class="text-base font-semibold text-slate-900">实现方式</div>
-        <ul class="text-slate-700 text-sm leading-relaxed list-disc pl-5 space-y-1">
-          <li>行情窗口：全体交易用 Tα={T_GLOBAL_USE} 分钟，超短单（持仓≤10 分钟）用 Tα={T_SHORT_USE} 分钟；基于 5 分钟 K 线，空头已镜像成“买低卖高”口径。</li>
-          <li>EntryRank/ExitRank：多头定义 EntryRank = (买价-区间最低)/(区间最高-最低)，ExitRank = (区间最高-卖价)/(区间最高-最低)；空头反向；无波动置 0.5。Rank∈[0,1]，越低越优。</li>
-          <li>Edge 捕获率：持仓区间内 (平仓价-开仓价)/(区间最高-最低)，空头镜像后裁剪到 [0,1]，衡量吃到的波动占比。</li>
-          <li>加权视角：提供笔数、成交金额权重、PnL（盈利部分）权重三种分布；按按钮切换 Rank/Edge 视角。</li>
-          <li>随机基准：直方图叠加 1/桶数的随机均匀基准线，并标出中位数虚线，用于对照是否优于随机择时。</li>
-        </ul>
-        <div class="text-base font-semibold text-slate-900 pt-2">相关页面</div>
-        <ul class="text-sm text-indigo-700 leading-relaxed list-disc pl-5 space-y-1">
-          <li><a class="underline hover:text-indigo-500" target="_blank" rel="noopener noreferrer" href="reports/visualization_analysis/daily_returns_comparison_light.html">日收益率对比</a></li>
-          <li><a class="underline hover:text-indigo-500" target="_blank" rel="noopener noreferrer" href="reports/visualization_analysis/pred_real_relationship_light.html">预测值与实际收益关系分析</a></li>
-          <li><a class="underline hover:text-indigo-500" target="_blank" rel="noopener noreferrer" href="reports/visualization_analysis/intraday_avg_holding_time_light.html">交易平均持仓时间</a></li>
-        </ul>
+      <div class="rounded-2xl border border-slate-200 bg-white shadow-sm p-4 space-y-4">
+        <div>
+            <div class="text-base font-semibold text-slate-900 mb-2">页面目的</div>
+            <p class="text-slate-700 leading-relaxed text-sm">
+                本页面旨在定量评估策略在交易执行层面的择时能力（Market Timing Ability）。通过统计模型在实际交易发生后的一定时间窗口内，成交价格相对于该窗口内市场极值（最高价与最低价）的位置分布，来判断策略是否具备捕捉短期市场拐点的能力。
+                <br/><br/>
+                指标 <strong>Rank</strong> 越接近 0，表明买入点越接近局部最低价（或卖出点越接近局部最高价），择时能力越强；反之，若 Rank 分布接近 0.5 或服从均匀分布，则说明策略在执行层面不具备显著的择时优势（即类似于随机入场）。
+            </p>
+        </div>
+        
+        <div>
+            <div class="text-base font-semibold text-slate-900 mb-2">实现方式</div>
+            <div class="text-slate-700 text-sm leading-relaxed space-y-3">
+                <p>核心指标 <strong>Entry Rank</strong>（开仓择时得分）与 <strong>Exit Rank</strong>（平仓择时得分）使用统一窗口与极值位置计算：</p>
+                <ul class="list-disc pl-5 space-y-3">
+                  <li><strong>时间窗口（入场/出场分开评估）</strong>：Entry 窗口 \([t_{\text{open}},\, t_{\text{close}}]\)，Exit 窗口 \([t_{\text{open}},\, t_{\text{close}} + 0.5\,T_{\alpha}]\)；\(t_{\text{open}}/t_{\text{close}}\) 为开/平仓时间，\(T_{\alpha}\) 取自持仓时长分位数（全体 \(=__T_GLOBAL__\,\text{min}\)，超短 \(=__T_SHORT__\,\text{min}\)），并在同一标的上按 \(\text{prev\_close}\)、\(\text{next\_open}\) 做边界裁剪。</li>
+                  <li><strong>Rank 公式（多头）</strong>：
+                    <div class="math-block">$$
+                    \begin{aligned}
+                    \text{EntryRank} &= \frac{P_{\text{buy}} - P_{\text{low}}}{P_{\text{high}} - P_{\text{low}}},\\\\
+                    \text{ExitRank}  &= \frac{P_{\text{high}} - P_{\text{sell}}}{P_{\text{high}} - P_{\text{low}}}
+                    \end{aligned}
+                    $$</div>
+                    其中 \(P_{\text{high}}, P_{\text{low}}\) 取自对应窗口（Entry/Exit）内的极值。空头镜像（卖出开仓与买入平仓对调）：
+                    <div class="math-block">$$
+                    \begin{aligned}
+                    \text{EntryRank}_{\text{short}} &= \frac{P_{\text{high}} - P_{\text{sell}}}{P_{\text{high}} - P_{\text{low}}},\\\\
+                    \text{ExitRank}_{\text{short}}  &= \frac{P_{\text{buy}} - P_{\text{low}}}{P_{\text{high}} - P_{\text{low}}}
+                    \end{aligned}
+                    $$</div>
+                    若 \(P_{\text{high}} = P_{\text{low}}\) 则取 0.5；所有结果裁剪到 \([0,1]\)。
+                  </li>
+                  <li><strong>Edge 捕获率</strong>：实际持仓区间 \([t_{\text{open}},\, t_{\text{close}}]\) 上，
+                    <div class="math-block">$$
+                    \text{Edge} = \frac{P_{\text{close}} - P_{\text{open}}}{P^{\text{hold}}_{\text{high}} - P^{\text{hold}}_{\text{low}}}
+                    $$</div>
+                    空头镜像后裁剪到 \([0,1]\)，衡量吃到的波动占比。
+                  </li>
+                  <li><strong>加权视角</strong>：直方图支持笔数、成交金额、PnL（仅盈利部分）三种权重，按钮切换；叠加随机均匀分布基准线（1/桶数）与中位数虚线，便于对照是否优于随机择时。</li>
+                  <li><strong>行情口径</strong>：全部使用 5 分钟 K 线提取窗口内的 High/Low 极值，空头已镜像为“买低卖高”方向以便可比。</li>
+                </ul>
+            </div>
+        </div>
+
+        <div class="pt-2 border-t border-slate-100">
+            <div class="text-base font-semibold text-slate-900 mb-2">相关页面</div>
+            <ul class="text-sm text-indigo-700 leading-relaxed list-disc pl-5 space-y-1">
+              <li><a class="underline hover:text-indigo-500" target="_blank" rel="noopener noreferrer" href="reports/visualization_analysis/daily_returns_comparison_light.html">日收益率对比</a></li>
+              <li><a class="underline hover:text-indigo-500" target="_blank" rel="noopener noreferrer" href="reports/visualization_analysis/pred_real_relationship_light.html">预测值与实际收益关系分析</a></li>
+              <li><a class="underline hover:text-indigo-500" target="_blank" rel="noopener noreferrer" href="reports/visualization_analysis/intraday_avg_holding_time_light.html">交易平均持仓时间</a></li>
+            </ul>
+        </div>
       </div>
     </div>
   </div>
@@ -903,7 +988,19 @@ html_text = f"""<!DOCTYPE html>
 </body>
 </html>
 """
-html_text = html_text.replace("__SCRIPT_BLOCK__", script_block)
+
+html_text = html_template.replace("__T_GLOBAL__", str(T_GLOBAL_USE)) \
+    .replace("__T_SHORT__", str(T_SHORT_USE)) \
+    .replace("__STATS_E_G_MEAN__", format_two_decimals(stats_e_g.get('mean') if stats_e_g else None)) \
+    .replace("__STATS_X_G_MEAN__", format_two_decimals(stats_x_g.get('mean') if stats_x_g else None)) \
+    .replace("__PERFECT_E__", format_pct(perfect_e)) \
+    .replace("__PERFECT_X__", format_pct(perfect_x)) \
+    .replace("__CHARTS_HTML__", charts_html) \
+    .replace("__SAMPLE_E_G__", f"{sample_counts.get('entries_g', 0):,}") \
+    .replace("__SAMPLE_X_G__", f"{sample_counts.get('exits_g', 0):,}") \
+    .replace("__SAMPLE_E_S__", f"{sample_counts.get('entries_s', 0):,}") \
+    .replace("__SAMPLE_X_S__", f"{sample_counts.get('exits_s', 0):,}") \
+    .replace("__SCRIPT_BLOCK__", script_block)
 
 REPORT_HTML.write_text(html_text, encoding='utf-8')
 REPORT_TXT.write_text(
