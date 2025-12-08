@@ -1,0 +1,11 @@
+{
+  "mcpServers": {
+    "codex-mcp": {
+      "command": "codex",
+      "args": [
+        "mcp-server"
+      ],
+      "trust": true
+    }
+  }
+}

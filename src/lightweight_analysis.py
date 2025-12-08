@@ -6335,9 +6335,9 @@ class LightweightAnalysis:
    - 归因日期：平仓日使用卖出日（空头用回补日），买入日归因使用买入开仓日。  
    - 等权：当日 \( r_{\text{pair}} \) 的算术平均；金额加权：以开仓名义金额为权重的加权平均。
 3. **PnL 口径（日资金效率）**  
-   - 当日 PnL（NAV 口径）：\( \text{PnL}_t = \text{NAV}_t - \text{NAV}_{t-1} \)，含已实现 + 未实现 + 利息/分红/融资融券费用（当前无单独字段视为 0） − 手续费/税费。  
+   - 当日 PnL（NAV 口径）：<span class="math-inline">\\( \\text{PnL}_{t} = \\text{NAV}_{t} - \\text{NAV}_{t-1} \\)</span>，含已实现 + 未实现 + 利息/分红/融资融券费用（当前无单独字段视为 0） − 手续费/税费。  
    - 分母：当日现金周转额 ≈ 买入成交额 + 卖出成交额（无法区分回补时近似为买+卖总额），成交额为 0 的日期不计算。  
-   - 日收益率：\( r^{\text{PnL}}_t = \frac{\text{PnL}_t}{\text{Turnover}_t} \)。
+   - 日收益率：<span class="math-inline">\\( r^{\\text{PnL}}_{t} = \\dfrac{\\text{PnL}_{t}}{\\text{Turnover}_{t}} \\)</span>。
 
 ### 解读建议
 - 金额加权显著低于等权：大额资金执行质量/信号有效性不足。  
@@ -9362,14 +9362,78 @@ class LightweightAnalysis:
                     </div>
                 </div>
                 
-                <!-- Info Banner -->
-                <div class="bg-yellow-50 border-l-4 border-yellow-400 p-4 mb-8 rounded-r text-sm text-yellow-800">
-                    <p class="font-bold mb-1"><i class='fas fa-lightbulb text-yellow-500'></i> 口径说明</p>
-                    <ul class="list-disc list-inside space-y-1 ml-2">
-                        <li><b>初始本金</b>：暂定为 <b>{first_day_initial_capital_display}</b> (基于首日最低所需本金 {first_day_min_capital_display} × 安全系数)。</li>
-                        <li><b>资金计算</b>：涉及现金/总资产的页面均基于此修正本金重算。</li>
-                        <li><b>假设</b>：首日前一日无持仓，首日收市持仓全额计入。</li>
-                    </ul>
+                <!-- Info Banner + Navigation -->
+                <div class="flex flex-col lg:flex-row gap-4 mb-8">
+                    <div class="bg-yellow-50 border-l-4 border-yellow-400 p-4 rounded-r text-sm text-yellow-800 lg:w-1/2">
+                        <p class="font-bold mb-1"><i class='fas fa-lightbulb text-yellow-500'></i> 口径说明</p>
+                        <ul class="list-disc list-inside space-y-1 ml-2">
+                            <li><b>初始本金</b>：暂定为 <b>{first_day_initial_capital_display}</b> (基于首日最低所需本金 {first_day_min_capital_display} × 安全系数)。</li>
+                            <li><b>资金计算</b>：涉及现金/总资产的页面均基于此修正本金重算。</li>
+                            <li><b>假设</b>：首日前一日无持仓，首日收市持仓全额计入。</li>
+                        </ul>
+                    </div>
+                    <div class="bg-white rounded-xl shadow-sm p-4 border border-gray-100 lg:w-1/2">
+                        <div class="flex items-center justify-between mb-3">
+                            <div class="flex items-center space-x-2 text-gray-800">
+                                <i class='fas fa-compass text-blue-500'></i>
+                                <span class="font-semibold">页面导航</span>
+                            </div>
+                            <span class="text-xs text-gray-400">直达关键位置</span>
+                        </div>
+                        <div class="grid grid-cols-1 sm:grid-cols-2 gap-4 text-sm">
+                            <div>
+                                <p class="text-gray-700 font-semibold mb-2 flex items-center space-x-2">
+                                    <i class='fas fa-layer-group text-indigo-500'></i><span>直达各大板块</span>
+                                </p>
+                                <div class="flex flex-wrap gap-2">
+                                    <button data-target="section-strategy-returns" class="inline-flex items-center px-3 py-1 bg-gray-50 text-gray-700 border border-gray-200 rounded-lg hover:bg-blue-50 hover:text-blue-700 transition">
+                                        <i class='fas fa-coins text-yellow-500 mr-2'></i> 策略收益
+                                    </button>
+                                    <button data-target="section-model-performance" class="inline-flex items-center px-3 py-1 bg-gray-50 text-gray-700 border border-gray-200 rounded-lg hover:bg-blue-50 hover:text-blue-700 transition">
+                                        <i class='fas fa-chart-bar text-indigo-500 mr-2'></i> 模型性能
+                                    </button>
+                                    <button data-target="section-predictive-power" class="inline-flex items-center px-3 py-1 bg-gray-50 text-gray-700 border border-gray-200 rounded-lg hover:bg-blue-50 hover:text-blue-700 transition">
+                                        <i class='fas fa-bullseye text-red-500 mr-2'></i> 预测有效性
+                                    </button>
+                                    <button data-target="section-portfolio" class="inline-flex items-center px-3 py-1 bg-gray-50 text-gray-700 border border-gray-200 rounded-lg hover:bg-blue-50 hover:text-blue-700 transition">
+                                        <i class='fas fa-chart-pie text-green-500 mr-2'></i> 投资组合
+                                    </button>
+                                    <button data-target="section-trading-execution" class="inline-flex items-center px-3 py-1 bg-gray-50 text-gray-700 border border-gray-200 rounded-lg hover:bg-blue-50 hover:text-blue-700 transition">
+                                        <i class='fas fa-bolt text-yellow-400 mr-2'></i> 交易执行
+                                    </button>
+                                    <button data-target="section-slippage-cost" class="inline-flex items-center px-3 py-1 bg-gray-50 text-gray-700 border border-gray-200 rounded-lg hover:bg-blue-50 hover:text-blue-700 transition">
+                                        <i class='fas fa-money-bill-wave text-green-600 mr-2'></i> 滑点成本
+                                    </button>
+                                    <button data-target="section-time-slot-profit" class="inline-flex items-center px-3 py-1 bg-gray-50 text-gray-700 border border-gray-200 rounded-lg hover:bg-blue-50 hover:text-blue-700 transition">
+                                        <i class='fas fa-clock text-blue-400 mr-2'></i> 时段盈利
+                                    </button>
+                                </div>
+                            </div>
+                            <div>
+                                <p class="text-gray-700 font-semibold mb-2 flex items-center space-x-2">
+                                    <i class='fas fa-location-arrow text-blue-500'></i><span>直达主要页面</span>
+                                </p>
+                                <div class="flex flex-wrap gap-2">
+                                    <button data-target="page-cumulative-returns" class="inline-flex items-center px-3 py-1 bg-gray-50 text-gray-700 border border-gray-200 rounded-lg hover:bg-blue-50 hover:text-blue-700 transition">
+                                        <i class='fas fa-chart-line text-red-500 mr-2'></i> 累计收益对比
+                                    </button>
+                                    <button data-target="page-daily-returns" class="inline-flex items-center px-3 py-1 bg-gray-50 text-gray-700 border border-gray-200 rounded-lg hover:bg-blue-50 hover:text-blue-700 transition">
+                                        <i class='fas fa-wave-square text-indigo-500 mr-2'></i> 日收益率对比
+                                    </button>
+                                    <button data-target="page-sharpe-nav" class="inline-flex items-center px-3 py-1 bg-gray-50 text-gray-700 border border-gray-200 rounded-lg hover:bg-blue-50 hover:text-blue-700 transition">
+                                        <i class='fas fa-chart-area text-blue-600 mr-2'></i> Sharpe与净值
+                                    </button>
+                                    <button data-target="page-factor-attribution" class="inline-flex items-center px-3 py-1 bg-gray-50 text-gray-700 border border-gray-200 rounded-lg hover:bg-blue-50 hover:text-blue-700 transition">
+                                        <i class='fas fa-sitemap text-green-500 mr-2'></i> 因子归因主图
+                                    </button>
+                                    <button data-target="page-entry-exit" class="relative inline-flex items-center px-3 py-1 bg-gray-50 text-gray-700 border border-gray-200 rounded-lg hover:bg-blue-50 hover:text-blue-700 transition pr-8">
+                                        <i class='fas fa-stopwatch text-yellow-500 mr-2'></i> 择时能力
+                                        <span class="absolute -top-1 right-1 text-[9px] font-semibold text-white bg-red-500 px-1 py-[1px] rounded-full shadow-sm">NEW</span>
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
                 </div>
         """
         
@@ -9475,8 +9539,24 @@ class LightweightAnalysis:
             sub_charts = [(name, title) for name, title in chart_groups['sub'] if name in available_figures]
             
             if main_charts or sub_charts:
+                section_id = ""
+                if "收益" in category:
+                    section_id = "section-strategy-returns"
+                elif "模型性能" in category:
+                    section_id = "section-model-performance"
+                elif "预测" in category:
+                    section_id = "section-predictive-power"
+                elif "投资组合" in category:
+                    section_id = "section-portfolio"
+                elif "交易执行" in category:
+                    section_id = "section-trading-execution"
+                elif "滑点" in category:
+                    section_id = "section-slippage-cost"
+                elif "时段盈利" in category:
+                    section_id = "section-time-slot-profit"
+
                 dashboard_html += f"""
-                <div class="mb-12">
+                <div class="mb-12" id="{section_id}">
                     <div class="flex items-center mb-6">
                         <div class="w-1 h-8 bg-blue-500 rounded-full mr-3"></div>
                         <h3 class="text-2xl font-bold text-gray-800">{category}</h3>
@@ -9487,10 +9567,21 @@ class LightweightAnalysis:
                 if main_charts:
                     for chart_name, chart_title in main_charts:
                         chart_path = available_figures[chart_name]
+                        card_attrs = ""
+                        if chart_name == "daily_returns_initial_capital_light":
+                            card_attrs = ' class="mb-8 relative" data-page-id="daily_returns_initial_capital_light" id="page-daily-initial-capital"'
+                        elif chart_name == "strategy_sharpe_nav":
+                            card_attrs = ' class="mb-8 relative" data-page-id="strategy_sharpe_nav" id="page-sharpe-nav"'
+                        elif chart_name == "entry_exit_rank_baostock_full":
+                            card_attrs = ' class="mb-8 relative" data-page-id="entry_exit_rank_baostock_full" id="page-entry-exit"'
+                        elif chart_name == "factor_attribution_main":
+                            card_attrs = ' class="mb-8 relative" id="page-factor-attribution"'
+                        else:
+                            card_attrs = ' class="mb-8"'
                         dashboard_html += f"""
-                        <div class="mb-8">
+                        <div{card_attrs}>
                             <div class="bg-white rounded-xl shadow-sm p-1 border-l-4 border-[#e53935] overflow-hidden">
-                                <iframe src="{Path(chart_path).name}" class="w-full h-[520px] border-none rounded-lg" loading="lazy"></iframe>
+                                <iframe src="{Path(chart_path).name}" class="w-full h-[520px] border-none rounded-lg" loading="lazy" title="{chart_title}"></iframe>
                                 <div class="text-center py-2 bg-gray-50 border-t border-gray-100">
                                     <a href="{Path(chart_path).name}" target="_blank" class="text-blue-600 hover:text-blue-800 text-sm font-medium transition-colors">
                                         <i class='fas fa-external-link-alt'></i> 在新窗口打开全屏查看
@@ -9508,9 +9599,20 @@ class LightweightAnalysis:
                     
                     for chart_name, chart_title in sub_charts:
                         chart_path = available_figures[chart_name]
+                        card_attrs = 'class="bg-white rounded-xl shadow-sm p-1 overflow-hidden"'
+                        if chart_name == "daily_returns_comparison_light":
+                            card_attrs = 'class="bg-white rounded-xl shadow-sm p-1 overflow-hidden relative" data-page-id="daily_returns_comparison_light" id="page-daily-returns"'
+                        elif chart_name == "cumulative_returns_comparison_light":
+                            card_attrs = 'class="bg-white rounded-xl shadow-sm p-1 overflow-hidden relative" id="page-cumulative-returns"'
+                        elif chart_name == "strategy_vs_benchmark_light":
+                            card_attrs = 'class="bg-white rounded-xl shadow-sm p-1 overflow-hidden relative" data-page-id="strategy_vs_benchmark_light" id="page-strategy-vs-benchmark"'
+                        elif chart_name == "returns_distribution_light":
+                            card_attrs = 'class="bg-white rounded-xl shadow-sm p-1 overflow-hidden relative" data-page-id="returns_distribution_light" id="page-returns-distribution"'
+                        elif chart_name == "intraday_avg_holding_time_light":
+                            card_attrs = 'class="bg-white rounded-xl shadow-sm p-1 overflow-hidden relative" data-page-id="intraday_avg_holding_time_light"'
                         dashboard_html += f"""
-                        <div class="bg-white rounded-xl shadow-sm p-1 overflow-hidden">
-                            <iframe src="{Path(chart_path).name}" class="w-full h-[520px] border-none rounded-lg" loading="lazy"></iframe>
+                        <div {card_attrs}>
+                            <iframe src="{Path(chart_path).name}" class="w-full h-[520px] border-none rounded-lg" loading="lazy" title="{chart_title}"></iframe>
                             <div class="text-center py-2 bg-gray-50 border-t border-gray-100">
                                 <a href="{Path(chart_path).name}" target="_blank" class="text-blue-600 hover:text-blue-800 text-sm font-medium transition-colors">
                                     <i class='fas fa-external-link-alt'></i> 在新窗口打开
@@ -9529,6 +9631,53 @@ class LightweightAnalysis:
                 """
             
         dashboard_html += """
+                <script>
+                    (function() {
+                        var badgeConfig = {
+                            "new": ["entry_exit_rank_baostock_full"],
+                            "upgrade": [
+                                "daily_returns_comparison_light",
+                                "returns_distribution_light",
+                                "daily_returns_initial_capital_light",
+                                "strategy_vs_benchmark_light",
+                                "strategy_sharpe_nav",
+                                "intraday_avg_holding_time_light"
+                            ]
+                        };
+                        var colors = { "new": "bg-red-500 text-white", "upgrade": "bg-blue-600 text-white" };
+                        if ('scrollRestoration' in history) {
+                            history.scrollRestoration = 'manual';
+                        }
+                        document.querySelectorAll('[data-target]').forEach(function(btn) {
+                            btn.addEventListener('click', function(e) {
+                                e.preventDefault();
+                                var targetId = this.getAttribute('data-target');
+                                var el = document.getElementById(targetId);
+                                if (el) {
+                                    el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                                }
+                            });
+                        });
+                        document.querySelectorAll('[data-page-id]').forEach(function(card) {
+                            var pid = card.getAttribute('data-page-id');
+                            var label = null;
+                            var type = null;
+                            if (badgeConfig.new.indexOf(pid) !== -1) {
+                                label = 'NEW';
+                                type = 'new';
+                            } else if (badgeConfig.upgrade.indexOf(pid) !== -1) {
+                                label = 'UPGRADE';
+                                type = 'upgrade';
+                            }
+                            if (!label) return;
+                            card.classList.add('relative');
+                            var badge = document.createElement('span');
+                            badge.textContent = label;
+                            badge.className = 'absolute top-2 left-2 z-10 pointer-events-none text-[10px] font-semibold px-2 py-[2px] rounded-full shadow-sm ' + colors[type];
+                            card.appendChild(badge);
+                        });
+                    })();
+                </script>
                 <footer class="text-center text-gray-400 text-sm py-8">
                     <p><i class='fas fa-bullseye text-red-500'></i> 高效设计 · <i class='fas fa-rocket text-blue-500'></i> 快速分析 · <i class='fas fa-chart-bar text-indigo-500'></i> 专业洞察</p>
                     <p class="mt-1">优化策略: 智能采样 + CDN加载 + 数据压缩 + Tailwind CSS</p>
@@ -9592,7 +9741,10 @@ class LightweightAnalysis:
             _timeit("投资组合构成", self.portfolio_composition_analysis)
             _timeit("因子归因（FF3）主页面", self.portfolio_factor_attribution_main)
             _timeit("因子归因（FF3）季度分析", self.portfolio_factor_attribution_quarterly)
-            _timeit("因子特征暴露", self.factor_exposure_analysis)
+            try:
+                _timeit("因子特征暴露", self.factor_exposure_analysis)
+            except Exception as fe:
+                print(f"[WARN] 因子特征暴露失败: {fe}")
             _timeit("滑点成本分析", self.slippage_cost_analysis)
             _timeit("执行分析", self.execution_analysis)
             _timeit("时段盈利能力分析", self.slot_performance_analysis)
