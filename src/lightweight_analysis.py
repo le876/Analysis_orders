@@ -5555,26 +5555,71 @@ class LightweightAnalysis:
             fig_abs.update_traces(hovertemplate='日期: %{x}<br>7日均线: ¥%{y:,.0f}<extra></extra>', selector=dict(mode='lines'))
 
             # 日收益率分布（基于 NAV 环比收益）
-            daily_returns = mtm_df['total_assets_num'].pct_change().replace([np.inf, -np.inf], np.nan).dropna()
+            daily_returns_raw = mtm_df['total_assets_num'].pct_change().replace([np.inf, -np.inf], np.nan)
+            daily_returns = daily_returns_raw.dropna()
             fig_ret = None
             fig_ret_json = "null"
             if len(daily_returns) > 0:
-                counts, edges = np.histogram(daily_returns, bins=min(40, max(10, int(np.sqrt(len(daily_returns))*2))))
+                # Winsorize极端值，避免单点拉长分布
+                lower_clip = daily_returns.quantile(0.01)
+                upper_clip = daily_returns.quantile(0.99)
+                daily_returns_clipped = daily_returns.clip(lower_clip, upper_clip)
+
+                # 自适应对称分箱：围绕0对称，保证正负区间可见
+                max_abs = float(np.percentile(np.abs(daily_returns_clipped), 99))
+                if max_abs <= 0:
+                    max_abs = float(np.abs(daily_returns_clipped).max())
+                if max_abs <= 0:
+                    max_abs = 0.001
+
+                n = len(daily_returns_clipped)
+                iqr = float(np.subtract(*np.percentile(daily_returns_clipped, [75, 25])))
+                bin_width = 2 * iqr * (n ** (-1/3)) if iqr > 0 else 0
+                if bin_width > 0:
+                    bins_cnt = int(np.clip(np.ceil((2 * max_abs) / bin_width), 15, 50))
+                else:
+                    bins_cnt = int(np.clip(np.sqrt(n) * 2, 15, 40))
+                edges = np.linspace(-max_abs, max_abs, bins_cnt + 1)
+
+                counts, edges = np.histogram(daily_returns_clipped, bins=edges)
                 centers = (edges[:-1] + edges[1:]) / 2
+                counts_list = counts.astype(float).tolist()
+                centers_list = centers.astype(float).tolist()
                 colors_ret = ['#e53935' if c >= 0 else '#43a047' for c in centers]
+
                 fig_ret = go.Figure()
                 fig_ret.add_trace(go.Bar(
-                    x=centers,
-                    y=counts,
+                    x=centers_list,
+                    y=counts_list,
                     marker_color=colors_ret,
                     name='日收益率分布',
-                    hovertemplate='收益率: %{x:.2%}<br>频数: %{y}<extra></extra>'
+                    hovertemplate='收益率: %{x:.2%}<br>频数: %{y}<extra></extra>',
+                    orientation='v'
                 ))
+
+                # KDE 作为平滑参考（缩放到频数尺度）
                 try:
-                    mean_ret = float(daily_returns.mean())
-                    median_ret = float(daily_returns.median())
-                    fig_ret.add_vline(x=mean_ret, line_dash='dash', line_color='#1f2937', opacity=0.5)
-                    fig_ret.add_vline(x=median_ret, line_dash='dot', line_color='#6366f1', opacity=0.5)
+                    kde_x = np.linspace(-max_abs, max_abs, 200)
+                    kde = stats.gaussian_kde(daily_returns_clipped)
+                    bin_width_est = edges[1] - edges[0]
+                    kde_y = kde(kde_x) * len(daily_returns_clipped) * bin_width_est
+                    fig_ret.add_trace(go.Scatter(
+                        x=kde_x.astype(float).tolist(),
+                        y=kde_y.astype(float).tolist(),
+                        mode='lines',
+                        line=dict(color='#6366f1', width=2),
+                        name='核密度',
+                        hovertemplate='收益率: %{x:.2%}<br>密度(≈频数): %{y:.2f}<extra></extra>',
+                        opacity=0.8
+                    ))
+                except Exception:
+                    pass
+
+                try:
+                    mean_ret = float(daily_returns_clipped.mean())
+                    median_ret = float(daily_returns_clipped.median())
+                    fig_ret.add_vline(x=mean_ret, line_dash='dash', line_color='#1f2937', opacity=0.55)
+                    fig_ret.add_vline(x=median_ret, line_dash='dot', line_color='#f59e0b', opacity=0.55)
                 except Exception:
                     pass
                 self._apply_plotly_theme(fig_ret, yaxis_percent=False)
@@ -5583,7 +5628,8 @@ class LightweightAnalysis:
                     xaxis=dict(title='日收益率', tickformat='.2%'),
                     yaxis=dict(title='频数（天）', zeroline=True, zerolinecolor='#9ca3af'),
                     height=420,
-                    showlegend=False
+                    showlegend=True,
+                    legend=dict(orientation='h', yanchor='bottom', y=1.02, xanchor='right', x=1)
                 )
 
             # 现金一致性指标（使用原始盯市数据校验，而非重算后的现金）
@@ -5696,16 +5742,16 @@ class LightweightAnalysis:
             ])
 
             explanation_md = r"""
-### 页面目的
+### **页面目的**
 - 展示每日净资产变动对应的绝对盈亏，快速定位大幅波动日期与整体盈利稳定性。
 
-### 计算方式
+### **计算方式**
 - 基于 `orders.parquet` 的成交额 `tradeAmount` 与手续费 `fee` 逐日回放现金流，叠加盯市多空市值得到当日总资产 $NAV_t$。
 - 日度绝对盈利 $$Profit_t = NAV_t - NAV_{t-1}$$ ，首日记为 NaN；正值用红色柱，负值用绿色柱。
 - 7 日均线 $$MA7_t = \frac{1}{k} \sum_{i=0}^{k-1} Profit_{t-i}$$，$k=\min(7,t)$，用于平滑短期波动。
 - 现金一致性检查 $$Cash_t = NAV_t - LongValue_t + ShortValue_t$$，偏差异常时需核对盯市口径与费用落账。
 
-### 交互与解读
+### **交互与解读**
 - 右上方时间选择器支持近 1/3/6 个月快速对比，RangeSlider 支持拖动查看全区间。
 - Hover 提示展示精确金额，虚线标记最大盈利日与最大亏损日；7 日均线用于观察盈利持续性。
 - 收益率分布直方图可识别偏斜与尾部风险，均值/中位数虚线用于判断收益集中区间。
@@ -6086,8 +6132,8 @@ class LightweightAnalysis:
             eq_by_mode = {'exit': daily_returns_equal, 'entry': daily_returns_equal}
             amt_by_mode = {'exit': daily_amount_weighted, 'entry': daily_amount_weighted}
         
-        # 方法3: PnL口径的日收益率（风险基准）：当日盯市PnL / 当日风险敞口
-        print("<i class='fas fa-chart-bar text-indigo-500'></i> 方法3: PnL = 当日盯市PnL / 当日风险敞口 ...")
+        # 方法3: PnL口径的日收益率（风险基准）：NAV口径PnL / 当日现金周转额
+        print("<i class='fas fa-chart-bar text-indigo-500'></i> 方法3: PnL = (已实现PnL+未实现PnL+利息分红-费用) / 当日现金周转额 ...")
 
         # 尝试加载盯市NAV以获取真实PnL
         daily_pnl_spend_returns = None
@@ -6135,29 +6181,35 @@ class LightweightAnalysis:
                         cash_balance += sell_amt - buy_amt - fee_amt
                     cash_series.append(cash_balance)
                 
+                # 现金与风险敞口（用于辅助校验）
                 mtm_df['cash_num'] = cash_series
                 mtm_df['total_assets_num'] = mtm_df['cash_num'] + mtm_df['long_value_num'] - mtm_df['short_value_num']
                 mtm_df['exposure_risk'] = (mtm_df['long_value_num'].abs() + mtm_df['short_value_num'].abs()) / 2
                 mtm_df['equity_prev'] = mtm_df['total_assets_num'].shift(1)
                 
-                # 当日真实PnL
+                # NAV口径PnL：已实现PnL(成交对现金的影响) + 未实现PnL(市值变化) - 费用 + 利息/分红/融资融券(目前无单独字段，视为0)
                 mtm_df = mtm_df.sort_values('date')
-                mtm_df['daily_pnl'] = mtm_df['total_assets_num'].diff()
+                mtm_df['daily_pnl_nav'] = mtm_df['total_assets_num'].diff()
                 
-                daily_pnl_series = pd.Series(mtm_df['daily_pnl'].values, index=mtm_df['date']).sort_index()
-                exposure_series = pd.Series(mtm_df['exposure_risk'].values, index=mtm_df['date']).sort_index()
+                # 以当日现金周转额作为分母：多头买入 + 空头卖出（无法区分回补时近似为买+卖总额）
+                daily_turnover_map = daily_flows_temp.filter(like='tradeAmount').sum(axis=1).to_dict()
+                mtm_df['daily_turnover'] = mtm_df['date'].dt.date.map(daily_turnover_map)
+                mtm_df['daily_turnover'] = mtm_df['daily_turnover'].fillna(0.0)
+                
+                daily_pnl_series = pd.Series(mtm_df['daily_pnl_nav'].values, index=mtm_df['date']).sort_index()
+                turnover_series = pd.Series(mtm_df['daily_turnover'].values, index=mtm_df['date']).sort_index()
                 equity_prev_series = pd.Series(mtm_df['equity_prev'].values, index=mtm_df['date']).sort_index()
 
-                # 对齐日期并计算 PnL/风险敞口（无敞口时回退到前一日NAV）
+                # 对齐日期并计算 PnL/现金周转额（无成交则跳过该日）
                 aligned = pd.concat([
-                    daily_pnl_series.rename('daily_pnl'),
-                    exposure_series.rename('daily_exposure'),
+                    daily_pnl_series.rename('daily_pnl_nav'),
+                    turnover_series.rename('daily_turnover'),
                     equity_prev_series.rename('equity_prev')
                 ], axis=1)
 
-                denom = aligned['daily_exposure'].where(aligned['daily_exposure'] > 0, aligned['equity_prev'])
-                valid = (denom > 0) & aligned['daily_pnl'].notna()
-                daily_pnl_spend_returns = (aligned.loc[valid, 'daily_pnl'] / denom.loc[valid]).clip(-1.0, 1.0)
+                denom = aligned['daily_turnover']
+                valid = (denom > 0) & aligned['daily_pnl_nav'].notna()
+                daily_pnl_spend_returns = aligned.loc[valid, 'daily_pnl_nav'] / denom.loc[valid]
                 # 保留对齐数据与有效掩码用于后续指标
                 pnl_spend_df = aligned.assign(denominator=denom)
                 pnl_spend_valid_mask = valid
@@ -6268,21 +6320,32 @@ class LightweightAnalysis:
                 hovermode='x unified',
                 legend=dict(x=0.02, y=0.98)
             )
+            fig_returns_comp.update_yaxes(ticksuffix='%', tickformat=".2f")
             
-            comparison_explanation = """
-<h4>页面目的</h4>
-<ul>
-    <li>用三种日收益率口径评估下单质量，区分信号排序、资金分配与现金效率。</li>
-    <li>提供买入日/平仓日两种归因方式，观察收益对执行时点的敏感度。</li>
-</ul>
-<h4>实现方式</h4>
-<ol>
-    <li>对每只 <code>Code</code> 按 <code>Timestamp</code> 先后执行 FIFO 配对：买入(<code>B</code>)与卖出(<code>S</code>)的 <code>tradeQty</code>、<code>tradeAmount</code>、<code>fee</code> 成对，单笔净收益 = 卖出金额 − 买入金额 − 买卖两端 <code>fee</code>，单笔收益率 = 净收益 ÷ 开仓时 <code>tradeAmount</code>。</li>
-    <li>按归因日期聚合：平仓日归因使用卖出日，买入日归因使用买入日；分别计算等权均值与以开仓 <code>tradeAmount</code> 为权重的加权均值。</li>
-    <li><b>PnL</b>（风险口径）：当日盯市盈亏 ÷ 当日平均风险敞口，其中敞口 = (|多头市值| + |空头市值|)/2；若敞口缺失则回退到前一日NAV，仅分母>0时计算。</li>
-    <li>曲线超过200个交易日会按时间抽样展示，避免加载过重，所有统计均基于全量数据。</li>
-</ol>
-<div style="margin-top:8px;">解读建议：若金额加权明显低于等权，说明大额交易执行质量不足；PnL若弱于配对收益，通常由持有期波动、未平仓敞口或杠杆/对冲暴露影响。</div>
+            comparison_explanation = r"""
+### 页面目的
+- 对比三种日收益率口径，分别刻画信号排序质量（等权）、资金分配效果（金额加权）、以及实际资金运用效率（PnL ÷ 成交额）。
+- 提供平仓日/买入日两种归因，检查收益对执行时点的敏感度。
+
+### 实现方式
+1. **FIFO 配对与单笔收益率**  
+   - 基于订单流（字段：`Timestamp`、`Code`、`direction`、`tradeQty`、`tradeAmount`、`fee`）按时间做 FIFO 配对：买入与卖出成对，净收益 \( \pi = \text{卖出额} - \text{买入额} - \text{双边费用} \)。  
+   - 单笔收益率 \( r_{\text{pair}} = \pi / \text{开仓名义金额} \)；多头开仓=买入额，空头开仓=卖出额。
+2. **等权 / 金额加权日收益**  
+   - 归因日期：平仓日使用卖出日（空头用回补日），买入日归因使用买入开仓日。  
+   - 等权：当日 \( r_{\text{pair}} \) 的算术平均；金额加权：以开仓名义金额为权重的加权平均。
+3. **PnL 口径（日资金效率）**  
+   - 当日 PnL（NAV 口径）：\( \text{PnL}_t = \text{NAV}_t - \text{NAV}_{t-1} \)，含已实现 + 未实现 + 利息/分红/融资融券费用（当前无单独字段视为 0） − 手续费/税费。  
+   - 分母：当日现金周转额 ≈ 买入成交额 + 卖出成交额（无法区分回补时近似为买+卖总额），成交额为 0 的日期不计算。  
+   - 日收益率：\( r^{\text{PnL}}_t = \text{PnL}_t / \text{Turnover}_t \)。
+4. **展示与抽样**  
+   - 日期统一使用 ISO 字符串并强制 `xaxis.type="date"`，避免日期被序列化为大整数。  
+   - 超过 200 个交易日的曲线按时间抽样显示以减轻前端负载，统计指标始终基于全量数据。
+
+### 解读建议
+- 金额加权显著低于等权：大额资金执行质量/信号有效性不足。  
+- PnL 明显弱于配对收益：说明持仓日内波动或成交额分母放大削弱了资金效率。  
+- 平仓日 vs 买入日差异大：需复盘进/出场节奏，确认收益敏感的关键时点。
 """
             
             # 添加按钮用于切换归因方式
@@ -6320,7 +6383,7 @@ class LightweightAnalysis:
             if 'daily_pnl_spend_returns_clipped' in locals() and len(daily_pnl_spend_returns_clipped) > 0:
                 returns_for_display = daily_pnl_spend_returns_clipped
                 data_source_name = "PnL"
-                calculation_method = "当日盯市PnL ÷ 当日风险敞口（无敞口时回退前一日NAV，仅分母>0）"
+                calculation_method = "NAV口径PnL(已实现+未实现+利息分红-费用) ÷ 当日现金周转额（买入+卖出总额，成交额>0才计算）"
             else:
                 # 回退：等权日收益率
                 returns_for_display = daily_returns
@@ -6354,6 +6417,7 @@ class LightweightAnalysis:
                 height=400,
                 xaxis=dict(type='date')
             )
+            fig_returns.update_yaxes(ticksuffix='%', tickformat=".2f")
             
             # 直接计算关键指标，避免数据裁剪导致的不一致（PnL风险口径视为常规日收益序列）
             real_cumulative = (1 + returns_for_display).cumprod() - 1 if len(returns_for_display) > 0 else pd.Series(dtype=float)
