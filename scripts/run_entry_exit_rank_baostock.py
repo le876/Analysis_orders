@@ -407,9 +407,11 @@ else:
     entries_g_notional = []; exits_g_notional = []; entries_s_notional = []; exits_s_notional = []
     entries_g_base_notional = []; exits_g_base_notional = []; entries_s_base_notional = []; exits_s_base_notional = []
     entries_g_pnl = []; exits_g_pnl = []; entries_s_pnl = []; exits_s_pnl = []
+    entries_g_pnl_all = []; exits_g_pnl_all = []; entries_s_pnl_all = []; exits_s_pnl_all = []
     entries_g_base_pnl = []; exits_g_base_pnl = []; entries_s_base_pnl = []; exits_s_base_pnl = []
-    edges_g = []; edges_g_notional = []; edges_g_pnl = []
-    edges_s = []; edges_s_notional = []; edges_s_pnl = []
+    entries_g_base_pnl_all = []; exits_g_base_pnl_all = []; entries_s_base_pnl_all = []; exits_s_base_pnl_all = []
+    edges_g = []; edges_g_notional = []; edges_g_pnl = []; edges_g_pnl_all = []
+    edges_s = []; edges_s_notional = []; edges_s_pnl = []; edges_s_pnl_all = []
 
     CACHE_DIR.mkdir(parents=True, exist_ok=True)
     cache_files = {code: CACHE_DIR / f"{code.replace('.', '_')}.parquet" for code in codes_sorted}
@@ -462,9 +464,11 @@ else:
             "entries_g_notional": [], "exits_g_notional": [], "entries_s_notional": [], "exits_s_notional": [],
             "entries_g_base_notional": [], "exits_g_base_notional": [], "entries_s_base_notional": [], "exits_s_base_notional": [],
             "entries_g_pnl": [], "exits_g_pnl": [], "entries_s_pnl": [], "exits_s_pnl": [],
+            "entries_g_pnl_all": [], "exits_g_pnl_all": [], "entries_s_pnl_all": [], "exits_s_pnl_all": [],
             "entries_g_base_pnl": [], "exits_g_base_pnl": [], "entries_s_base_pnl": [], "exits_s_base_pnl": [],
-            "edges_g": [], "edges_g_notional": [], "edges_g_pnl": [],
-            "edges_s": [], "edges_s_notional": [], "edges_s_pnl": [],
+            "entries_g_base_pnl_all": [], "exits_g_base_pnl_all": [], "entries_s_base_pnl_all": [], "exits_s_base_pnl_all": [],
+            "edges_g": [], "edges_g_notional": [], "edges_g_pnl": [], "edges_g_pnl_all": [],
+            "edges_s": [], "edges_s_notional": [], "edges_s_pnl": [], "edges_s_pnl_all": [],
         }
 
         for _, row in trades.iterrows():
@@ -472,6 +476,7 @@ else:
             fees = float((row.get('buy_fee', 0) or 0) + (row.get('sell_fee', 0) or 0))
             notional_in = row['open_price'] * qty
             pnl = ((row['close_price'] - row['open_price']) * qty if row['trade_type'] != 'short' else (row['open_price'] - row['close_price']) * qty) - fees
+            pnl_abs = abs(pnl)
             # 边界裁剪：避免跨越前一平仓和下一开仓
             prev_close = row.get('prev_close_ts')
             next_open = row.get('next_open_ts')
@@ -494,6 +499,7 @@ else:
                 res["entries_g"].append(er)
                 res["entries_g_notional"].append((er, notional_in))
                 res["entries_g_pnl"].append((er, max(pnl, 0)))
+                res["entries_g_pnl_all"].append((er, pnl_abs))
                 # 经验基准：随机抽取窗口内一根K线的随机价
                 rand_idx = RNG.integers(0, len(es))
                 low_r, high_r = es['low'].iloc[rand_idx], es['high'].iloc[rand_idx]
@@ -504,6 +510,7 @@ else:
                     res["entries_g_base"].append(er_base)
                     res["entries_g_base_notional"].append((er_base, notional_in))
                     res["entries_g_base_pnl"].append((er_base, max(pnl, 0)))
+                    res["entries_g_base_pnl_all"].append((er_base, pnl_abs))
 
             # Exit 窗口：开仓 -> 平仓后 T/2（物理分钟）
             x_start = row['open_timestamp']
@@ -516,6 +523,7 @@ else:
                 res["exits_g"].append(xr)
                 res["exits_g_notional"].append((xr, notional_in))
                 res["exits_g_pnl"].append((xr, max(pnl, 0)))
+                res["exits_g_pnl_all"].append((xr, pnl_abs))
                 rand_idx = RNG.integers(0, len(xs))
                 low_r2, high_r2 = xs['low'].iloc[rand_idx], xs['high'].iloc[rand_idx]
                 if np.isfinite(low_r2) and np.isfinite(high_r2) and hi2 != lo2:
@@ -525,6 +533,7 @@ else:
                     res["exits_g_base"].append(xr_base)
                     res["exits_g_base_notional"].append((xr_base, notional_in))
                     res["exits_g_base_pnl"].append((xr_base, max(pnl, 0)))
+                    res["exits_g_base_pnl_all"].append((xr_base, pnl_abs))
 
             hold_slice = md.loc[(md.index >= row['open_timestamp']) & (md.index <= row['close_timestamp'])]
             if not hold_slice.empty:
@@ -538,6 +547,7 @@ else:
                 res["edges_g"].append(edge)
                 res["edges_g_notional"].append((edge, notional_in))
                 res["edges_g_pnl"].append((edge, max(pnl, 0)))
+                res["edges_g_pnl_all"].append((edge, pnl_abs))
 
             if row['holding_minutes_trading'] <= 10:
                 e_start_s = row['open_timestamp']
@@ -550,6 +560,7 @@ else:
                     res["entries_s"].append(er_s)
                     res["entries_s_notional"].append((er_s, notional_in))
                     res["entries_s_pnl"].append((er_s, max(pnl, 0)))
+                    res["entries_s_pnl_all"].append((er_s, pnl_abs))
                     rand_idx_s = RNG.integers(0, len(es_s))
                     low_rs, high_rs = es_s['low'].iloc[rand_idx_s], es_s['high'].iloc[rand_idx_s]
                     if np.isfinite(low_rs) and np.isfinite(high_rs) and hiS != loS:
@@ -559,6 +570,7 @@ else:
                         res["entries_s_base"].append(er_s_base)
                         res["entries_s_base_notional"].append((er_s_base, notional_in))
                         res["entries_s_base_pnl"].append((er_s_base, max(pnl, 0)))
+                        res["entries_s_base_pnl_all"].append((er_s_base, pnl_abs))
                 x_start_s = row['open_timestamp']
                 x_end_s = row['close_timestamp'] + timedelta(minutes=T_SHORT / 2)
                 x_start_s, x_end_s = apply_bounds(x_start_s, x_end_s)
@@ -569,6 +581,7 @@ else:
                     res["exits_s"].append(xr_s)
                     res["exits_s_notional"].append((xr_s, notional_in))
                     res["exits_s_pnl"].append((xr_s, max(pnl, 0)))
+                    res["exits_s_pnl_all"].append((xr_s, pnl_abs))
                     rand_idx_s2 = RNG.integers(0, len(xs_s))
                     low_rs2, high_rs2 = xs_s['low'].iloc[rand_idx_s2], xs_s['high'].iloc[rand_idx_s2]
                     if np.isfinite(low_rs2) and np.isfinite(high_rs2) and hiS2 != loS2:
@@ -578,10 +591,12 @@ else:
                         res["exits_s_base"].append(xr_s_base)
                         res["exits_s_base_notional"].append((xr_s_base, notional_in))
                         res["exits_s_base_pnl"].append((xr_s_base, max(pnl, 0)))
+                        res["exits_s_base_pnl_all"].append((xr_s_base, pnl_abs))
                 if not hold_slice.empty:
                     res["edges_s"].append(edge)
                     res["edges_s_notional"].append((edge, notional_in))
                     res["edges_s_pnl"].append((edge, max(pnl, 0)))
+                    res["edges_s_pnl_all"].append((edge, pnl_abs))
 
         return res
 
@@ -627,9 +642,11 @@ else:
         "entries_g_notional", "exits_g_notional", "entries_s_notional", "exits_s_notional",
         "entries_g_base_notional", "exits_g_base_notional", "entries_s_base_notional", "exits_s_base_notional",
         "entries_g_pnl", "exits_g_pnl", "entries_s_pnl", "exits_s_pnl",
+        "entries_g_pnl_all", "exits_g_pnl_all", "entries_s_pnl_all", "exits_s_pnl_all",
         "entries_g_base_pnl", "exits_g_base_pnl", "entries_s_base_pnl", "exits_s_base_pnl",
-        "edges_g", "edges_g_notional", "edges_g_pnl",
-        "edges_s", "edges_s_notional", "edges_s_pnl",
+        "entries_g_base_pnl_all", "exits_g_base_pnl_all", "entries_s_base_pnl_all", "exits_s_base_pnl_all",
+        "edges_g", "edges_g_notional", "edges_g_pnl", "edges_g_pnl_all",
+        "edges_s", "edges_s_notional", "edges_s_pnl", "edges_s_pnl_all",
     ]
     merged = {k: [] for k in agg_keys}
     for res in all_results:
@@ -646,10 +663,16 @@ else:
     entries_s_base_notional = merged["entries_s_base_notional"]; exits_s_base_notional = merged["exits_s_base_notional"]
     entries_g_pnl = merged["entries_g_pnl"]; exits_g_pnl = merged["exits_g_pnl"]
     entries_s_pnl = merged["entries_s_pnl"]; exits_s_pnl = merged["exits_s_pnl"]
+    entries_g_pnl_all = merged["entries_g_pnl_all"]; exits_g_pnl_all = merged["exits_g_pnl_all"]
+    entries_s_pnl_all = merged["entries_s_pnl_all"]; exits_s_pnl_all = merged["exits_s_pnl_all"]
     entries_g_base_pnl = merged["entries_g_base_pnl"]; exits_g_base_pnl = merged["exits_g_base_pnl"]
     entries_s_base_pnl = merged["entries_s_base_pnl"]; exits_s_base_pnl = merged["exits_s_base_pnl"]
+    entries_g_base_pnl_all = merged["entries_g_base_pnl_all"]; exits_g_base_pnl_all = merged["exits_g_base_pnl_all"]
+    entries_s_base_pnl_all = merged["entries_s_base_pnl_all"]; exits_s_base_pnl_all = merged["exits_s_base_pnl_all"]
     edges_g = merged["edges_g"]; edges_g_notional = merged["edges_g_notional"]; edges_g_pnl = merged["edges_g_pnl"]
+    edges_g_pnl_all = merged["edges_g_pnl_all"]
     edges_s = merged["edges_s"]; edges_s_notional = merged["edges_s_notional"]; edges_s_pnl = merged["edges_s_pnl"]
+    edges_s_pnl_all = merged["edges_s_pnl_all"]
 
     print('✅ 行情抓取与计算完成', flush=True)
     print('样本数: global entry/exit =', len(entries_g), len(exits_g), '; short entry/exit =', len(entries_s), len(exits_s))
@@ -675,19 +698,25 @@ else:
     xv, xw = unpack_weighted(exits_g_notional); xvb, xwb = unpack_weighted(exits_g_base_notional); add_hist('exits_g_notional', '全体交易 ExitRank（成交金额加权）', xv, weights=xw, baseline_data=xvb, baseline_weights=xwb)
     evp, ewp = unpack_weighted(entries_g_pnl); evpb, ewpb = unpack_weighted(entries_g_base_pnl); add_hist('entries_g_pnl', '全体交易 EntryRank（PnL加权，盈利部分）', evp, weights=ewp, baseline_data=evpb, baseline_weights=ewpb)
     xvp, xwp = unpack_weighted(exits_g_pnl); xvpb, xwpb = unpack_weighted(exits_g_base_pnl); add_hist('exits_g_pnl', '全体交易 ExitRank（PnL加权，盈利部分）', xvp, weights=xwp, baseline_data=xvpb, baseline_weights=xwpb)
+    evp_all, ewp_all = unpack_weighted(entries_g_pnl_all); evpb_all, ewpb_all = unpack_weighted(entries_g_base_pnl_all); add_hist('entries_g_pnl_all', '全体交易 EntryRank（PnL加权，含亏损）', evp_all, weights=ewp_all, baseline_data=evpb_all, baseline_weights=ewpb_all)
+    xvp_all, xwp_all = unpack_weighted(exits_g_pnl_all); xvpb_all, xwpb_all = unpack_weighted(exits_g_base_pnl_all); add_hist('exits_g_pnl_all', '全体交易 ExitRank（PnL加权，含亏损）', xvp_all, weights=xwp_all, baseline_data=xvpb_all, baseline_weights=xwpb_all)
 
     evs, ews = unpack_weighted(entries_s_notional); evsb, ewsb = unpack_weighted(entries_s_base_notional); add_hist('entries_s_notional', '超短单 EntryRank（成交金额加权）', evs, weights=ews, baseline_data=evsb, baseline_weights=ewsb)
     xvs, xws = unpack_weighted(exits_s_notional); xvbs, xwbs = unpack_weighted(exits_s_base_notional); add_hist('exits_s_notional', '超短单 ExitRank（成交金额加权）', xvs, weights=xws, baseline_data=xvbs, baseline_weights=xwbs)
     evsp, ewsp = unpack_weighted(entries_s_pnl); evspb, ewspb = unpack_weighted(entries_s_base_pnl); add_hist('entries_s_pnl', '超短单 EntryRank（PnL加权，盈利部分）', evsp, weights=ewsp, baseline_data=evspb, baseline_weights=ewspb)
     xvsp, xwsp = unpack_weighted(exits_s_pnl); xvspb, xwspb = unpack_weighted(exits_s_base_pnl); add_hist('exits_s_pnl', '超短单 ExitRank（PnL加权，盈利部分）', xvsp, weights=xwsp, baseline_data=xvspb, baseline_weights=xwspb)
+    evsp_all, ewsp_all = unpack_weighted(entries_s_pnl_all); evspb_all, ewspb_all = unpack_weighted(entries_s_base_pnl_all); add_hist('entries_s_pnl_all', '超短单 EntryRank（PnL加权，含亏损）', evsp_all, weights=ewsp_all, baseline_data=evspb_all, baseline_weights=ewspb_all)
+    xvsp_all, xwsp_all = unpack_weighted(exits_s_pnl_all); xvspb_all, xwspb_all = unpack_weighted(exits_s_base_pnl_all); add_hist('exits_s_pnl_all', '超短单 ExitRank（PnL加权，含亏损）', xvsp_all, weights=xwsp_all, baseline_data=xvspb_all, baseline_weights=xwspb_all)
 
     add_hist('edge_g', '全体交易 Edge 捕获率（笔数）', edges_g)
     ev_edge, ew_edge = unpack_weighted(edges_g_notional); add_hist('edge_g_notional', '全体交易 Edge 捕获率（成交金额加权）', ev_edge, ew_edge)
     ev_edgep, ew_edgep = unpack_weighted(edges_g_pnl); add_hist('edge_g_pnl', '全体交易 Edge 捕获率（PnL加权，盈利部分）', ev_edgep, ew_edgep)
+    ev_edgep_all, ew_edgep_all = unpack_weighted(edges_g_pnl_all); add_hist('edge_g_pnl_all', '全体交易 Edge 捕获率（PnL加权，含亏损）', ev_edgep_all, ew_edgep_all)
 
     add_hist('edge_s', '超短单 Edge 捕获率（笔数）', edges_s)
     ev_edge_s, ew_edge_s = unpack_weighted(edges_s_notional); add_hist('edge_s_notional', '超短单 Edge 捕获率（成交金额加权）', ev_edge_s, ew_edge_s)
     ev_edge_sp, ew_edge_sp = unpack_weighted(edges_s_pnl); add_hist('edge_s_pnl', '超短单 Edge 捕获率（PnL加权，盈利部分）', ev_edge_sp, ew_edge_sp)
+    ev_edge_sp_all, ew_edge_sp_all = unpack_weighted(edges_s_pnl_all); add_hist('edge_s_pnl_all', '超短单 Edge 捕获率（PnL加权，含亏损）', ev_edge_sp_all, ew_edge_sp_all)
 
     sample_counts = {
         'entries_g': len(entries_g),
@@ -747,7 +776,7 @@ def build_mode_figs(is_short=False):
             hist_map[key_x_n],
         )
         add_mode(f"{prefix}_rank_notional", "Rank·金额权重", fig)
-    # rank - PnL加权
+    # rank - PnL加权（盈利部分）
     key_e_p = "entries_s_pnl" if is_short else "entries_g_pnl"
     key_x_p = "exits_s_pnl" if is_short else "exits_g_pnl"
     if key_e_p in hist_map and key_x_p in hist_map:
@@ -757,6 +786,16 @@ def build_mode_figs(is_short=False):
             hist_map[key_x_p],
         )
         add_mode(f"{prefix}_rank_pnl", "Rank·PnL权重", fig)
+    # rank - PnL加权（含亏损）
+    key_e_p_all = "entries_s_pnl_all" if is_short else "entries_g_pnl_all"
+    key_x_p_all = "exits_s_pnl_all" if is_short else "exits_g_pnl_all"
+    if key_e_p_all in hist_map and key_x_p_all in hist_map:
+        fig = paired_hist_fig(
+            f"{'超短单' if is_short else '全体交易'} Entry / Exit Rank（PnL加权，含亏损，Tα={tg} 分钟）",
+            hist_map[key_e_p_all],
+            hist_map[key_x_p_all],
+        )
+        add_mode(f"{prefix}_rank_pnl_all", "Rank·PnL含亏损", fig)
     # Edge
     key_edge = "edge_s" if is_short else "edge_g"
     if key_edge in hist_map:
@@ -782,6 +821,14 @@ def build_mode_figs(is_short=False):
             color="#1f2937",
         )
         add_mode(f"{prefix}_edge_pnl", "Edge·PnL权重", fig)
+    key_edge_p_all = "edge_s_pnl_all" if is_short else "edge_g_pnl_all"
+    if key_edge_p_all in hist_map:
+        fig = single_hist_fig(
+            f"{'超短单' if is_short else '全体交易'} Edge 捕获率（PnL加权，含亏损）",
+            hist_map[key_edge_p_all],
+            color="#111827",
+        )
+        add_mode(f"{prefix}_edge_pnl_all", "Edge·PnL含亏损", fig)
     return modes
 
 
@@ -1060,7 +1107,7 @@ html_template = r"""<!DOCTYPE html>
                     $$</div>
                     空头镜像后裁剪到 \([0,1]\)，衡量吃到的波动占比。
                   </li>
-                  <li><strong>加权视角</strong>：直方图支持笔数、成交金额、PnL（仅盈利部分）三种权重，按钮切换；基准线优先使用<strong>经验基准</strong>（在同一窗口随机抽取一根 5 分钟 K 线，并在其 High/Low 间随机取价计算 Rank，累积成分布），若样本不足则回退为均匀基准 \(1/\text{bins}\)；同时叠加中位数虚线，便于对照是否优于随机择时。</li>
+                  <li><strong>加权视角</strong>：直方图支持笔数、成交金额、PnL 两种口径（<em>盈利部分</em>：max(PnL,0)，<em>含亏损</em>：|PnL|）权重，按钮切换；基准线优先使用<strong>经验基准</strong>（在同一窗口随机抽取一根 5 分钟 K 线，并在其 High/Low 间随机取价计算 Rank，累积成分布），若样本不足则回退为均匀基准 \(1/\text{bins}\)；同时叠加中位数虚线，便于对照是否优于随机择时。</li>
                   <li><strong>行情口径</strong>：全部使用 5 分钟 K 线提取窗口内的 High/Low 极值，空头已镜像为“买低卖高”方向以便可比。</li>
                 </ul>
             </div>
