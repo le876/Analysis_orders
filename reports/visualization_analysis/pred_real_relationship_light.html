@@ -1,0 +1,103 @@
+
+            <!DOCTYPE html>
+            <html>
+            <head>
+                <meta charset="utf-8" />
+                <meta name="viewport" content="width=device-width, initial-scale=1" />
+                <title>预测值与实际收益关系分析</title>
+                <script src="https://cdn.plot.ly/plotly-latest.min.js"></script>
+                <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+                <script src="https://cdn.tailwindcss.com"></script>
+                <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+                <style>
+                    body { font-family: "Noto Sans SC","Microsoft YaHei","Segoe UI",sans-serif; }
+                    .markdown-body h3 { font-size: 1.05rem; margin-top: 1rem; margin-bottom: .45rem; }
+                    .markdown-body p { margin: .35rem 0; color: #374151; line-height: 1.65; }
+                    .markdown-body ul { margin: .25rem 0 .5rem 1.2rem; color: #374151; line-height: 1.6; list-style: disc; }
+                    .markdown-body li { margin: .2rem 0; }
+                </style>
+                <script>
+                    window.MathJax = {
+                        tex: {
+                            inlineMath: [["$","$"],["\(","\)"]],
+                            displayMath: [["$$","$$"],["\[","\]"]],
+                            processEscapes: true
+                        },
+                        options: { skipHtmlTags: ["script","noscript","style","textarea","pre","code"] },
+                        svg: { fontCache: 'global' }
+                    };
+                </script>
+                <script id="MathJax-script" async src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-chtml-full.js" onerror="this.onerror=null; this.src='../assets/mathjax/tex-chtml-full.js';"></script>
+            </head>
+            <body class="bg-gray-50">
+                <header class="sticky top-0 z-30 bg-white shadow-sm border-b border-gray-100">
+                    <div class="max-w-7xl mx-auto px-4 sm:px-6 py-3 flex items-center justify-between">
+                        <div>
+                            <p class="text-[11px] tracking-[0.18em] text-gray-500 uppercase">时段分析</p>
+                            <h1 class="text-xl font-semibold text-gray-900">预测值与实际收益关系分析</h1>
+                        </div>
+                        <div class="text-xs text-gray-500">滚动查看完整内容</div>
+                    </div>
+                </header>
+                <main class="max-w-7xl mx-auto px-4 sm:px-6 py-6">
+                    <div class="bg-white rounded-lg shadow-sm p-6" id="page-root">
+                        <div id="main-chart" class="mb-6">
+                            
+            <div id="pred_real_relationship_light" class="plotly-graph-div" style="height:800px; width:100%;"></div>
+            <script type="text/javascript">
+                window.PLOTLYENV=window.PLOTLYENV || {};
+                (function() {
+                    var fig = {"data": [{"hovertemplate": "分组: %{x}<br>平均pred: %{y:.4f}<extra></extra>", "marker": {"color": "rgba(231, 76, 60, 0.7)"}, "name": "平均预测值 (pred)", "x": ["G1", "G2", "G3", "G4", "G5", "G6", "G7", "G8", "G9", "G10"], "y": [0.5671, 1.6664, 1.8573, 2.0267, 2.1931, 2.3754, 2.6015, 2.9576, 3.5646, 5.4706], "type": "bar", "xaxis": "x", "yaxis": "y", "text": ["0.57", "1.67", "1.86", "2.03", "2.19", "2.38", "2.60", "2.96", "3.56", "5.47"], "textposition": "outside"}, {"hovertemplate": "分组: %{x}<br>平均real: %{y:.4f}<extra></extra>", "line": {"color": "steelblue", "width": 3}, "marker": {"color": "steelblue", "size": 7}, "mode": "lines+markers", "name": "平均真实标签 (real)", "x": ["G1", "G2", "G3", "G4", "G5", "G6", "G7", "G8", "G9", "G10"], "y": [-4.1191, 0.8659, 0.9976, 1.1409, 1.3074, 1.4611, 1.6544, 2.0087, 2.631, 4.5481], "type": "scatter", "xaxis": "x", "yaxis": "y"}, {"hovertemplate": "分组: %{x}<br>总绝对收益: %{y:.2f}<extra></extra>", "marker": {"color": "steelblue"}, "name": "总绝对收益", "opacity": 0.8, "text": ["1782534", "424020", "444664", "544186", "738328", "958945", "1255628", "1884079", "3866504", "9444315"], "textposition": "outside", "x": ["G1", "G2", "G3", "G4", "G5", "G6", "G7", "G8", "G9", "G10"], "y": [1782534.0402, 424019.5961, 444664.2306, 544185.7822, 738328.1287, 958944.894, 1255628.0178, 1884079.2567, 3866503.5808, 9444314.8936], "type": "bar", "xaxis": "x2", "yaxis": "y2"}, {"hovertemplate": "分组: %{x}<br>胜率: %{y:.1f}%<extra></extra>", "line": {"color": "green", "dash": "dash", "width": 2}, "marker": {"color": "green", "size": 6}, "mode": "lines+markers", "name": "胜率 (%)", "x": ["G1", "G2", "G3", "G4", "G5", "G6", "G7", "G8", "G9", "G10"], "y": [54.32699939676795, 50.6738790510132, 50.84373784596824, 50.81020585538927, 51.226094238011896, 51.33448956022367, 51.23187312976736, 52.185732711578524, 56.895552715756395, 62.86586261226401], "type": "scatter", "xaxis": "x2", "yaxis": "y3"}], "layout": {"template": {"data": {"histogram2dcontour": [{"type": "histogram2dcontour", "colorbar": {"outlinewidth": 0, "ticks": ""}, "colorscale": [[0.0, "#0d0887"], [0.1111111111111111, "#46039f"], [0.2222222222222222, "#7201a8"], [0.3333333333333333, "#9c179e"], [0.4444444444444444, "#bd3786"], [0.5555555555555556, "#d8576b"], [0.6666666666666666, "#ed7953"], [0.7777777777777778, "#fb9f3a"], [0.8888888888888888, "#fdca26"], [1.0, "#f0f921"]]}], "choropleth": [{"type": "choropleth", "colorbar": {"outlinewidth": 0, "ticks": ""}}], "histogram2d": [{"type": "histogram2d", "colorbar": {"outlinewidth": 0, "ticks": ""}, "colorscale": [[0.0, "#0d0887"], [0.1111111111111111, "#46039f"], [0.2222222222222222, "#7201a8"], [0.3333333333333333, "#9c179e"], [0.4444444444444444, "#bd3786"], [0.5555555555555556, "#d8576b"], [0.6666666666666666, "#ed7953"], [0.7777777777777778, "#fb9f3a"], [0.8888888888888888, "#fdca26"], [1.0, "#f0f921"]]}], "heatmap": [{"type": "heatmap", "colorbar": {"outlinewidth": 0, "ticks": ""}, "colorscale": [[0.0, "#0d0887"], [0.1111111111111111, "#46039f"], [0.2222222222222222, "#7201a8"], [0.3333333333333333, "#9c179e"], [0.4444444444444444, "#bd3786"], [0.5555555555555556, "#d8576b"], [0.6666666666666666, "#ed7953"], [0.7777777777777778, "#fb9f3a"], [0.8888888888888888, "#fdca26"], [1.0, "#f0f921"]]}], "contourcarpet": [{"type": "contourcarpet", "colorbar": {"outlinewidth": 0, "ticks": ""}}], "contour": [{"type": "contour", "colorbar": {"outlinewidth": 0, "ticks": ""}, "colorscale": [[0.0, "#0d0887"], [0.1111111111111111, "#46039f"], [0.2222222222222222, "#7201a8"], [0.3333333333333333, "#9c179e"], [0.4444444444444444, "#bd3786"], [0.5555555555555556, "#d8576b"], [0.6666666666666666, "#ed7953"], [0.7777777777777778, "#fb9f3a"], [0.8888888888888888, "#fdca26"], [1.0, "#f0f921"]]}], "surface": [{"type": "surface", "colorbar": {"outlinewidth": 0, "ticks": ""}, "colorscale": [[0.0, "#0d0887"], [0.1111111111111111, "#46039f"], [0.2222222222222222, "#7201a8"], [0.3333333333333333, "#9c179e"], [0.4444444444444444, "#bd3786"], [0.5555555555555556, "#d8576b"], [0.6666666666666666, "#ed7953"], [0.7777777777777778, "#fb9f3a"], [0.8888888888888888, "#fdca26"], [1.0, "#f0f921"]]}], "mesh3d": [{"type": "mesh3d", "colorbar": {"outlinewidth": 0, "ticks": ""}}], "scatter": [{"fillpattern": {"fillmode": "overlay", "size": 10, "solidity": 0.2}, "type": "scatter"}], "parcoords": [{"type": "parcoords", "line": {"colorbar": {"outlinewidth": 0, "ticks": ""}}}], "scatterpolargl": [{"type": "scatterpolargl", "marker": {"colorbar": {"outlinewidth": 0, "ticks": ""}}}], "bar": [{"error_x": {"color": "#2a3f5f"}, "error_y": {"color": "#2a3f5f"}, "marker": {"line": {"color": "#E5ECF6", "width": 0.5}, "pattern": {"fillmode": "overlay", "size": 10, "solidity": 0.2}}, "type": "bar"}], "scattergeo": [{"type": "scattergeo", "marker": {"colorbar": {"outlinewidth": 0, "ticks": ""}}}], "scatterpolar": [{"type": "scatterpolar", "marker": {"colorbar": {"outlinewidth": 0, "ticks": ""}}}], "histogram": [{"marker": {"pattern": {"fillmode": "overlay", "size": 10, "solidity": 0.2}}, "type": "histogram"}], "scattergl": [{"type": "scattergl", "marker": {"colorbar": {"outlinewidth": 0, "ticks": ""}}}], "scatter3d": [{"type": "scatter3d", "line": {"colorbar": {"outlinewidth": 0, "ticks": ""}}, "marker": {"colorbar": {"outlinewidth": 0, "ticks": ""}}}], "scattermap": [{"type": "scattermap", "marker": {"colorbar": {"outlinewidth": 0, "ticks": ""}}}], "scattermapbox": [{"type": "scattermapbox", "marker": {"colorbar": {"outlinewidth": 0, "ticks": ""}}}], "scatterternary": [{"type": "scatterternary", "marker": {"colorbar": {"outlinewidth": 0, "ticks": ""}}}], "scattercarpet": [{"type": "scattercarpet", "marker": {"colorbar": {"outlinewidth": 0, "ticks": ""}}}], "carpet": [{"aaxis": {"endlinecolor": "#2a3f5f", "gridcolor": "white", "linecolor": "white", "minorgridcolor": "white", "startlinecolor": "#2a3f5f"}, "baxis": {"endlinecolor": "#2a3f5f", "gridcolor": "white", "linecolor": "white", "minorgridcolor": "white", "startlinecolor": "#2a3f5f"}, "type": "carpet"}], "table": [{"cells": {"fill": {"color": "#EBF0F8"}, "line": {"color": "white"}}, "header": {"fill": {"color": "#C8D4E3"}, "line": {"color": "white"}}, "type": "table"}], "barpolar": [{"marker": {"line": {"color": "#E5ECF6", "width": 0.5}, "pattern": {"fillmode": "overlay", "size": 10, "solidity": 0.2}}, "type": "barpolar"}], "pie": [{"automargin": true, "type": "pie"}]}, "layout": {"autotypenumbers": "strict", "colorway": ["#636efa", "#EF553B", "#00cc96", "#ab63fa", "#FFA15A", "#19d3f3", "#FF6692", "#B6E880", "#FF97FF", "#FECB52"], "font": {"color": "#2a3f5f"}, "hovermode": "closest", "hoverlabel": {"align": "left"}, "paper_bgcolor": "white", "plot_bgcolor": "#E5ECF6", "polar": {"bgcolor": "#E5ECF6", "angularaxis": {"gridcolor": "white", "linecolor": "white", "ticks": ""}, "radialaxis": {"gridcolor": "white", "linecolor": "white", "ticks": ""}}, "ternary": {"bgcolor": "#E5ECF6", "aaxis": {"gridcolor": "white", "linecolor": "white", "ticks": ""}, "baxis": {"gridcolor": "white", "linecolor": "white", "ticks": ""}, "caxis": {"gridcolor": "white", "linecolor": "white", "ticks": ""}}, "coloraxis": {"colorbar": {"outlinewidth": 0, "ticks": ""}}, "colorscale": {"sequential": [[0.0, "#0d0887"], [0.1111111111111111, "#46039f"], [0.2222222222222222, "#7201a8"], [0.3333333333333333, "#9c179e"], [0.4444444444444444, "#bd3786"], [0.5555555555555556, "#d8576b"], [0.6666666666666666, "#ed7953"], [0.7777777777777778, "#fb9f3a"], [0.8888888888888888, "#fdca26"], [1.0, "#f0f921"]], "sequentialminus": [[0.0, "#0d0887"], [0.1111111111111111, "#46039f"], [0.2222222222222222, "#7201a8"], [0.3333333333333333, "#9c179e"], [0.4444444444444444, "#bd3786"], [0.5555555555555556, "#d8576b"], [0.6666666666666666, "#ed7953"], [0.7777777777777778, "#fb9f3a"], [0.8888888888888888, "#fdca26"], [1.0, "#f0f921"]], "diverging": [[0, "#8e0152"], [0.1, "#c51b7d"], [0.2, "#de77ae"], [0.3, "#f1b6da"], [0.4, "#fde0ef"], [0.5, "#f7f7f7"], [0.6, "#e6f5d0"], [0.7, "#b8e186"], [0.8, "#7fbc41"], [0.9, "#4d9221"], [1, "#276419"]]}, "xaxis": {"gridcolor": "white", "linecolor": "white", "ticks": "", "title": {"standoff": 15}, "zerolinecolor": "white", "automargin": true, "zerolinewidth": 2}, "yaxis": {"gridcolor": "white", "linecolor": "white", "ticks": "", "title": {"standoff": 15}, "zerolinecolor": "white", "automargin": true, "zerolinewidth": 2}, "scene": {"xaxis": {"backgroundcolor": "#E5ECF6", "gridcolor": "white", "linecolor": "white", "showbackground": true, "ticks": "", "zerolinecolor": "white", "gridwidth": 2}, "yaxis": {"backgroundcolor": "#E5ECF6", "gridcolor": "white", "linecolor": "white", "showbackground": true, "ticks": "", "zerolinecolor": "white", "gridwidth": 2}, "zaxis": {"backgroundcolor": "#E5ECF6", "gridcolor": "white", "linecolor": "white", "showbackground": true, "ticks": "", "zerolinecolor": "white", "gridwidth": 2}}, "shapedefaults": {"line": {"color": "#2a3f5f"}}, "annotationdefaults": {"arrowcolor": "#2a3f5f", "arrowhead": 0, "arrowwidth": 1}, "geo": {"bgcolor": "white", "landcolor": "#E5ECF6", "subunitcolor": "white", "showland": true, "showlakes": true, "lakecolor": "white"}, "title": {"x": 0.05}, "mapbox": {"style": "light"}}}, "xaxis": {"anchor": "y", "domain": [0.0, 0.94], "title": {"text": "预测值分组 (从低到高)"}, "showgrid": false, "zeroline": false}, "yaxis": {"anchor": "x", "domain": [0.56, 1.0], "title": {"text": "平均预测值"}, "showgrid": true, "gridcolor": "#e5e7eb", "zeroline": true, "zerolinecolor": "#9ca3af"}, "xaxis2": {"anchor": "y2", "domain": [0.0, 0.94], "title": {"text": "预测值分组 (从低到高)"}}, "yaxis2": {"anchor": "x2", "domain": [0.0, 0.44], "title": {"text": "总绝对收益"}}, "yaxis3": {"anchor": "x2", "overlaying": "y2", "side": "right", "title": {"text": "胜率 (%)"}, "range": [45, 55]}, "annotations": [{"font": {"size": 16}, "showarrow": false, "text": "pred-true对比（按买入pred分组）", "x": 0.47, "xanchor": "center", "xref": "paper", "y": 1.0, "yanchor": "bottom", "yref": "paper"}, {"font": {"size": 16}, "showarrow": false, "text": "绝对收益与胜率（按买入pred分组）", "x": 0.47, "xanchor": "center", "xref": "paper", "y": 0.44, "yanchor": "bottom", "yref": "paper"}], "shapes": [{"line": {"color": "gray", "dash": "dash"}, "opacity": 0.5, "type": "line", "x0": 0, "x1": 1, "xref": "x2 domain", "y0": 0, "y1": 0, "yref": "y2"}], "legend": {"x": 0.02, "y": 0.98}, "title": {"text": "预测性能与盈利能力分组分析（基于完整交易）<br><sub>pred-real相关性: 0.8807 | pred-绝对收益相关性: 0.8564 | 分组数: 10 | 交易对数: 4,956,827</sub>"}, "height": 800, "hovermode": "x unified", "bargap": 0.3, "font": {"family": "Noto Sans SC, \"Microsoft YaHei\", \"Segoe UI\", sans-serif"}, "margin": {"t": 30, "b": 40, "l": 60, "r": 20}, "paper_bgcolor": "rgba(0,0,0,0)", "plot_bgcolor": "rgba(0,0,0,0)"}};
+                    var cfg = {"displayModeBar": false, "displaylogo": false, "modeBarButtonsToRemove": ["pan2d", "lasso2d"]};
+                    if (document.getElementById("pred_real_relationship_light")) {
+                        Plotly.newPlot("pred_real_relationship_light", fig.data || [], fig.layout || {}, cfg);
+                    }
+                })();
+            </script>
+            
+                        </div>
+                        
+                <div class="mt-2 mb-4">
+                    <table class="w-full text-sm border border-gray-100 rounded-md overflow-hidden">
+                        <thead class="bg-gray-50 text-gray-500">
+                            <tr><th class="py-2 px-3 text-left">指标</th><th class="py-2 px-3 text-left">数值</th></tr>
+                        </thead>
+                        <tbody class="divide-y divide-gray-100"><tr><td class='py-2 px-3 text-gray-600'>分组数量</td><td class='py-2 px-3 text-gray-900 font-medium'>10</td></tr><tr><td class='py-2 px-3 text-gray-600'>完整交易对数</td><td class='py-2 px-3 text-gray-900 font-medium'>4,956,827</td></tr><tr><td class='py-2 px-3 text-gray-600'>总绝对盈利</td><td class='py-2 px-3 text-gray-900 font-medium'>46243413.65</td></tr><tr><td class='py-2 px-3 text-gray-600'>平均每笔盈利</td><td class='py-2 px-3 text-gray-900 font-medium'>9.33</td></tr><tr><td class='py-2 px-3 text-gray-600'>整体胜率</td><td class='py-2 px-3 text-gray-900 font-medium'>53.8%</td></tr><tr><td class='py-2 px-3 text-gray-600'>pred-real相关性</td><td class='py-2 px-3 text-gray-900 font-medium'>0.8807</td></tr><tr><td class='py-2 px-3 text-gray-600'>pred-绝对收益相关性</td><td class='py-2 px-3 text-gray-900 font-medium'>0.8564</td></tr><tr><td class='py-2 px-3 text-gray-600'>预测值范围</td><td class='py-2 px-3 text-gray-900 font-medium'>-9.9618 ~ 15.6608</td></tr><tr><td class='py-2 px-3 text-gray-600'>最高组总收益</td><td class='py-2 px-3 text-gray-900 font-medium'>9444314.89</td></tr><tr><td class='py-2 px-3 text-gray-600'>最低组总收益</td><td class='py-2 px-3 text-gray-900 font-medium'>424019.60</td></tr><tr><td class='py-2 px-3 text-gray-600'>收益区分度</td><td class='py-2 px-3 text-gray-900 font-medium'>9020295.30</td></tr></tbody>
+                    </table>
+                </div>
+                
+                        <div id="explain-md" class="markdown-body mt-4"></div>
+                    </div>
+                </main>
+                <script>
+                    (function ensureRender(){
+                        var mdText = "\n        <h4>页面目的</h4>\n        <ul>\n            <li>检验买入信号 <code>pred</code> 与完整交易绝对收益的单调性，评估信号排序价值。</li>\n            <li>识别盈利集中在哪些信号分组，为阈值、持仓时长和风控调节提供依据。</li>\n        </ul>\n        <h4>实现方式</h4>\n        <ol>\n            <li>按 <code>Code</code> 和 <code>Timestamp</code> 先后对 <code>direction</code> 为 <code>B/S</code> 的订单执行 FIFO 配对，单笔净收益 = 卖出 <code>tradeAmount</code> − 买入 <code>tradeAmount</code> − 买卖两端 <code>fee</code>，并记录开仓时的 <code>pred</code>。</li>\n            <li>将完整配对按 <code>pred</code> 分位划分为 10 组，计算每组总绝对盈利、平均净收益与胜率，并绘制分组柱状与累计曲线。</li>\n            <li>输出相关性指标：<code>pred</code> 与 <code>real</code>、与单笔绝对盈利的皮尔逊相关，用于验证信号排序是否带来收益差异。</li>\n            <li>指标面板同步展示完整交易对数量(4,956,827)、总绝对盈利(46243413.65)、最高/最低分组差值和整体胜率(53.8%)。</li>\n        </ol>\n        \n        <div style=\"margin-top: 12px; padding: 12px; background-color: #f8f9fa; border-left: 4px solid #17a2b8;\">\n        <h4>计算要点</h4>\n        <ul>\n            <li>买入成交金额 = <code>tradeAmount</code>（<code>B</code>方向），卖出成交金额同理；费用 <code>fee</code> 按买卖两端实付计入。</li>\n            <li>单笔净收益 = 卖出金额 − 买入金额 − 买卖两端 <code>fee</code>；单笔绝对收益取其绝对值用于分组累加。</li>\n            <li>组内指标（总绝对盈利、平均净收益、胜率）全部基于配对结果计算，未直接使用 <code>real</code> 作为收益。</li>\n        </ul>\n        </div>\n        \n        <h4>盈亏对账口径</h4>\n        <ol>\n            <li><b>已实现部分</b>：基于 FIFO 配对的净收益直接求和。</li>\n            <li><b>未实现部分</b>：汇总未被配对的 <code>tradeQty</code>，用该标的最后一笔 <code>price</code> 近似收盘价估值，按方向扣除或回补成本与 <code>fee</code>。</li>\n            <li><b>Recon 对齐</b>：已实现盈亏 + 未实现盈亏 与盯市总绝对盈利对照，差异主要来自末价近似、费用四舍五入及未计入的分红/融资。</li>\n        </ol>\n        <p>本期 Recon：已实现盈亏=46,243,413.65，未实现盈亏=3,210,234.24，合计=49,453,647.89；盯市总绝对盈利=50,017,695.67；差额=-564,047.77。</p>\n        ";
+                        var mdTarget = document.getElementById('explain-md');
+                        if (mdTarget){
+                            if (window.marked) {
+                                mdTarget.innerHTML = marked.parse(mdText);
+                            } else {
+                                mdTarget.textContent = mdText;
+                            }
+                        }
+                        var anchor = document.getElementById('main-chart');
+                        if (anchor) {
+                            requestAnimationFrame(function() {
+                                anchor.scrollIntoView({ behavior: 'auto', block: 'start' });
+                            });
+                        }
+                        function typeset() {
+                            if (window.MathJax && window.MathJax.typesetPromise) {
+                                window.MathJax.typesetPromise().catch(function(err){ console.warn('MathJax error:', err); });
+                            }
+                        }
+                        if (document.readyState === 'complete') {
+                            typeset();
+                        } else {
+                            window.addEventListener('load', typeset);
+                        }
+                    })();
+                </script>
+            </body>
+            </html>
+            

@@ -1,0 +1,3 @@
+Global holding duration (minutes) P25/P50/P75: 2879.44,8426.92,18428.57
+Across codes, median duration P25/P50/P75 (minutes): 6485.87,10071.91,16454.80
+total_cycles=56009, codes_with_cycles=2763, neg_events=18881, open_left=2834

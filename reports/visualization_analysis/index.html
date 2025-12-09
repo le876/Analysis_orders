@@ -1,0 +1,607 @@
+
+        <!DOCTYPE html>
+        <html lang="zh-CN">
+        <head>
+            <meta charset="utf-8">
+            <meta name="viewport" content="width=device-width, initial-scale=1">
+            <title>量化策略分析报告</title>
+            <script src="https://cdn.tailwindcss.com"></script>
+            
+            <script src="https://cdn.plot.ly/plotly-latest.min.js"></script>
+                <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+            <link rel="icon" href="data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMzIiIGhlaWdodD0iMzIiIHZpZXdCb3g9IjAgMCAzMiAzMiIgZmlsbD0ibm9uZSIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj4KPHJlY3Qgd2lkdGg9IjMyIiBoZWlnaHQ9IjMyIiByeD0iOCIgZmlsbD0iIzM0OThkYiIvPgo8cGF0aCBkPSJNOCAxMkwxNiA4TDI0IDEyTDE2IDE2TDggMTJaIiBmaWxsPSJ3aGl0ZSIvPgo8cGF0aCBkPSJNOCAxOEwxNiAxNEwyNCAxOEwxNiAyMkw4IDE4WiIgZmlsbD0id2hpdGUiLz4KPHN2Zz4K" type="image/svg+xml">
+            <style>
+                /* 自定义字体栈 */
+                body { font-family: "Inter", "Segoe UI", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", sans-serif; }
+                /* 隐藏 Plotly 的 modebar */
+                .js-plotly-plot .plotly .modebar { display: none !important; }
+            </style>
+        </head>
+        <body class="bg-gray-50 text-gray-800 min-h-screen p-6">
+            <div class="max-w-7xl mx-auto">
+                <!-- Header -->
+                <header class="bg-white rounded-xl shadow-sm p-8 mb-8 text-center border-t-4 border-blue-500">
+                    <h1 class="text-3xl font-bold text-gray-900 mb-2"><i class='fas fa-rocket text-blue-500'></i> 量化策略分析报告</h1>
+                    <div class="flex justify-center items-center space-x-4 text-sm text-gray-500 mb-4">
+                        <span><i class='far fa-calendar-alt text-gray-500'></i> 生成时间: 2025-12-08 22:39:44</span>
+                        <span><i class='fas fa-chart-bar text-indigo-500'></i> 数据量: 8,469,308 条</span>
+                    </div>
+                </header>
+
+                <!-- KPI Cards (Pyramid Level 1) -->
+                <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
+                    <!-- Total Return -->
+                    <div class="bg-white rounded-xl shadow-sm p-6 border-l-4 border-[#e53935]">
+                        <div class="text-sm text-gray-500 uppercase tracking-wide font-semibold mb-1">总收益率 (NAV)</div>
+                        <div class="text-3xl font-bold text-[#e53935]">80.86%</div>
+                    </div>
+                    <!-- Max Drawdown -->
+                    <div class="bg-white rounded-xl shadow-sm p-6 border-l-4 border-yellow-500">
+                        <div class="text-sm text-gray-500 uppercase tracking-wide font-semibold mb-1">最大回撤</div>
+                        <div class="text-3xl font-bold text-yellow-600">-0.14%</div>
+                    </div>
+                    <!-- Sharpe Ratio -->
+                    <div class="bg-white rounded-xl shadow-sm p-6 border-l-4 border-blue-500">
+                        <div class="text-sm text-gray-500 uppercase tracking-wide font-semibold mb-1">夏普比率</div>
+                        <div class="text-3xl font-bold text-blue-600">17.137</div>
+                    </div>
+                    <!-- Win Rate -->
+                    <div class="bg-white rounded-xl shadow-sm p-6 border-l-4 border-[#e53935]">
+                        <div class="text-sm text-gray-500 uppercase tracking-wide font-semibold mb-1">盈利日占比</div>
+                        <div class="text-3xl font-bold text-gray-800">93.39%</div>
+                    </div>
+                </div>
+                
+                <!-- Info Banner + Navigation -->
+                <div class="flex flex-col lg:flex-row gap-4 mb-8">
+                    <div class="bg-yellow-50 border-l-4 border-yellow-400 p-4 rounded-r text-sm text-yellow-800 lg:w-1/2">
+                        <p class="font-bold mb-1"><i class='fas fa-lightbulb text-yellow-500'></i> 口径说明</p>
+                        <ul class="list-disc list-inside space-y-1 ml-2">
+                            <li><b>初始本金</b>：暂定为 <b>¥62,090,808</b> (基于首日最低所需本金 ¥47,762,160 × 安全系数)。</li>
+                            <li><b>资金计算</b>：涉及现金/总资产的页面均基于此修正本金重算。</li>
+                            <li><b>假设</b>：首日前一日无持仓，首日收市持仓全额计入。</li>
+                        </ul>
+                    </div>
+                    <div class="bg-white rounded-xl shadow-sm p-4 border border-gray-100 lg:w-1/2">
+                        <div class="flex items-center justify-between mb-3">
+                            <div class="flex items-center space-x-2 text-gray-800">
+                                <i class='fas fa-compass text-blue-500'></i>
+                                <span class="font-semibold">页面导航</span>
+                            </div>
+                            <span class="text-xs text-gray-400">直达关键位置</span>
+                        </div>
+                        <div class="grid grid-cols-1 sm:grid-cols-2 gap-4 text-sm">
+                            <div>
+                                <p class="text-gray-700 font-semibold mb-2 flex items-center space-x-2">
+                                    <i class='fas fa-layer-group text-indigo-500'></i><span>直达各大板块</span>
+                                </p>
+                                <div class="flex flex-wrap gap-2">
+                                    <button data-target="section-strategy-returns" class="inline-flex items-center px-3 py-1 bg-gray-50 text-gray-700 border border-gray-200 rounded-lg hover:bg-blue-50 hover:text-blue-700 transition">
+                                        <i class='fas fa-coins text-yellow-500 mr-2'></i> 策略收益
+                                    </button>
+                                    <button data-target="section-model-performance" class="inline-flex items-center px-3 py-1 bg-gray-50 text-gray-700 border border-gray-200 rounded-lg hover:bg-blue-50 hover:text-blue-700 transition">
+                                        <i class='fas fa-chart-bar text-indigo-500 mr-2'></i> 模型性能
+                                    </button>
+                                    <button data-target="section-predictive-power" class="inline-flex items-center px-3 py-1 bg-gray-50 text-gray-700 border border-gray-200 rounded-lg hover:bg-blue-50 hover:text-blue-700 transition">
+                                        <i class='fas fa-bullseye text-red-500 mr-2'></i> 预测有效性
+                                    </button>
+                                    <button data-target="section-portfolio" class="inline-flex items-center px-3 py-1 bg-gray-50 text-gray-700 border border-gray-200 rounded-lg hover:bg-blue-50 hover:text-blue-700 transition">
+                                        <i class='fas fa-chart-pie text-green-500 mr-2'></i> 投资组合
+                                    </button>
+                                    <button data-target="section-trading-execution" class="inline-flex items-center px-3 py-1 bg-gray-50 text-gray-700 border border-gray-200 rounded-lg hover:bg-blue-50 hover:text-blue-700 transition">
+                                        <i class='fas fa-bolt text-yellow-400 mr-2'></i> 交易执行
+                                    </button>
+                                    <button data-target="section-slippage-cost" class="inline-flex items-center px-3 py-1 bg-gray-50 text-gray-700 border border-gray-200 rounded-lg hover:bg-blue-50 hover:text-blue-700 transition">
+                                        <i class='fas fa-money-bill-wave text-green-600 mr-2'></i> 滑点成本
+                                    </button>
+                                    <button data-target="section-time-slot-profit" class="inline-flex items-center px-3 py-1 bg-gray-50 text-gray-700 border border-gray-200 rounded-lg hover:bg-blue-50 hover:text-blue-700 transition">
+                                        <i class='fas fa-clock text-blue-400 mr-2'></i> 时段盈利
+                                    </button>
+                                </div>
+                            </div>
+                            <div>
+                                <p class="text-gray-700 font-semibold mb-2 flex items-center space-x-2">
+                                    <i class='fas fa-location-arrow text-blue-500'></i><span>直达主要页面</span>
+                                </p>
+                                <div class="flex flex-wrap gap-2">
+                                    <button data-target="page-cumulative-returns" class="inline-flex items-center px-3 py-1 bg-gray-50 text-gray-700 border border-gray-200 rounded-lg hover:bg-blue-50 hover:text-blue-700 transition">
+                                        <i class='fas fa-chart-line text-red-500 mr-2'></i> 累计收益对比
+                                    </button>
+                                    <button data-target="page-daily-returns" class="inline-flex items-center px-3 py-1 bg-gray-50 text-gray-700 border border-gray-200 rounded-lg hover:bg-blue-50 hover:text-blue-700 transition">
+                                        <i class='fas fa-wave-square text-indigo-500 mr-2'></i> 日收益率对比
+                                    </button>
+                                    <button data-target="page-sharpe-nav" class="inline-flex items-center px-3 py-1 bg-gray-50 text-gray-700 border border-gray-200 rounded-lg hover:bg-blue-50 hover:text-blue-700 transition">
+                                        <i class='fas fa-chart-area text-blue-600 mr-2'></i> Sharpe与净值
+                                    </button>
+                                    <button data-target="page-factor-attribution" class="inline-flex items-center px-3 py-1 bg-gray-50 text-gray-700 border border-gray-200 rounded-lg hover:bg-blue-50 hover:text-blue-700 transition">
+                                        <i class='fas fa-sitemap text-green-500 mr-2'></i> 因子归因主图
+                                    </button>
+                                    <button data-target="page-entry-exit" class="relative inline-flex items-center px-3 py-1 bg-gray-50 text-gray-700 border border-gray-200 rounded-lg hover:bg-blue-50 hover:text-blue-700 transition pr-8">
+                                        <i class='fas fa-stopwatch text-yellow-500 mr-2'></i> 择时能力
+                                        <span class="absolute -top-1 right-1 text-[9px] font-semibold text-white bg-red-500 px-1 py-[1px] rounded-full shadow-sm">NEW</span>
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+        
+                <div class="mb-12" id="section-strategy-returns">
+                    <div class="flex items-center mb-6">
+                        <div class="w-1 h-8 bg-blue-500 rounded-full mr-3"></div>
+                        <h3 class="text-2xl font-bold text-gray-800"><i class='fas fa-coins text-yellow-500'></i> 策略收益分析</h3>
+                    </div>
+                
+                        <div class="mb-8">
+                            <div class="bg-white rounded-xl shadow-sm p-1 border-l-4 border-[#e53935] overflow-hidden">
+                                <iframe src="daily_absolute_profit_light.html" class="w-full h-[520px] border-none rounded-lg" loading="lazy" title="日度绝对盈利（盯市）"></iframe>
+                                <div class="text-center py-2 bg-gray-50 border-t border-gray-100">
+                                    <a href="daily_absolute_profit_light.html" target="_blank" class="text-blue-600 hover:text-blue-800 text-sm font-medium transition-colors">
+                                        <i class='fas fa-external-link-alt'></i> 在新窗口打开全屏查看
+                                    </a>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <div class="mb-8 relative" data-page-id="daily_returns_initial_capital_light" id="page-daily-initial-capital">
+                            <div class="bg-white rounded-xl shadow-sm p-1 border-l-4 border-[#e53935] overflow-hidden">
+                                <iframe src="daily_returns_initial_capital_light.html" class="w-full h-[520px] border-none rounded-lg" loading="lazy" title="日收益率曲线（以首日总资产为本金）"></iframe>
+                                <div class="text-center py-2 bg-gray-50 border-t border-gray-100">
+                                    <a href="daily_returns_initial_capital_light.html" target="_blank" class="text-blue-600 hover:text-blue-800 text-sm font-medium transition-colors">
+                                        <i class='fas fa-external-link-alt'></i> 在新窗口打开全屏查看
+                                    </a>
+                                </div>
+                            </div>
+                        </div>
+                        
+                    <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                    
+                        <div class="bg-white rounded-xl shadow-sm p-1 overflow-hidden relative" data-page-id="daily_returns_comparison_light" id="page-daily-returns">
+                            <iframe src="daily_returns_comparison_light.html" class="w-full h-[520px] border-none rounded-lg" loading="lazy" title="日收益率对比（衡量下单质量的三种方法）"></iframe>
+                            <div class="text-center py-2 bg-gray-50 border-t border-gray-100">
+                                <a href="daily_returns_comparison_light.html" target="_blank" class="text-blue-600 hover:text-blue-800 text-sm font-medium transition-colors">
+                                    <i class='fas fa-external-link-alt'></i> 在新窗口打开
+                                </a>
+                            </div>
+                        </div>
+                        
+                        <div class="bg-white rounded-xl shadow-sm p-1 overflow-hidden relative" id="page-cumulative-returns">
+                            <iframe src="cumulative_returns_comparison_light.html" class="w-full h-[520px] border-none rounded-lg" loading="lazy" title="累积收益对比（三种方法）"></iframe>
+                            <div class="text-center py-2 bg-gray-50 border-t border-gray-100">
+                                <a href="cumulative_returns_comparison_light.html" target="_blank" class="text-blue-600 hover:text-blue-800 text-sm font-medium transition-colors">
+                                    <i class='fas fa-external-link-alt'></i> 在新窗口打开
+                                </a>
+                            </div>
+                        </div>
+                        
+                        <div class="bg-white rounded-xl shadow-sm p-1 overflow-hidden relative" data-page-id="strategy_vs_benchmark_light" id="page-strategy-vs-benchmark">
+                            <iframe src="strategy_vs_benchmark_light.html" class="w-full h-[520px] border-none rounded-lg" loading="lazy" title="策略vs基准指数累积收益对比"></iframe>
+                            <div class="text-center py-2 bg-gray-50 border-t border-gray-100">
+                                <a href="strategy_vs_benchmark_light.html" target="_blank" class="text-blue-600 hover:text-blue-800 text-sm font-medium transition-colors">
+                                    <i class='fas fa-external-link-alt'></i> 在新窗口打开
+                                </a>
+                            </div>
+                        </div>
+                        
+                        <div class="bg-white rounded-xl shadow-sm p-1 overflow-hidden relative" data-page-id="returns_distribution_light" id="page-returns-distribution">
+                            <iframe src="returns_distribution_light.html" class="w-full h-[520px] border-none rounded-lg" loading="lazy" title="日绝对收益分布（盯市）"></iframe>
+                            <div class="text-center py-2 bg-gray-50 border-t border-gray-100">
+                                <a href="returns_distribution_light.html" target="_blank" class="text-blue-600 hover:text-blue-800 text-sm font-medium transition-colors">
+                                    <i class='fas fa-external-link-alt'></i> 在新窗口打开
+                                </a>
+                            </div>
+                        </div>
+                        
+                        <div class="bg-white rounded-xl shadow-sm p-1 overflow-hidden">
+                            <iframe src="capital_utilization_light.html" class="w-full h-[520px] border-none rounded-lg" loading="lazy" title="每日最低所需本金 + 资金占用收益率"></iframe>
+                            <div class="text-center py-2 bg-gray-50 border-t border-gray-100">
+                                <a href="capital_utilization_light.html" target="_blank" class="text-blue-600 hover:text-blue-800 text-sm font-medium transition-colors">
+                                    <i class='fas fa-external-link-alt'></i> 在新窗口打开
+                                </a>
+                            </div>
+                        </div>
+                        
+                    </div>
+                    
+                </div>
+                <div class="h-px bg-gradient-to-r from-transparent via-gray-200 to-transparent my-10"></div>
+                
+                <div class="mb-12" id="section-model-performance">
+                    <div class="flex items-center mb-6">
+                        <div class="w-1 h-8 bg-blue-500 rounded-full mr-3"></div>
+                        <h3 class="text-2xl font-bold text-gray-800"><i class='fas fa-chart-bar text-indigo-500'></i> 模型性能分析</h3>
+                    </div>
+                
+                        <div class="mb-8 relative" data-page-id="strategy_sharpe_nav" id="page-sharpe-nav">
+                            <div class="bg-white rounded-xl shadow-sm p-1 border-l-4 border-[#e53935] overflow-hidden">
+                                <iframe src="strategy_sharpe_nav.html" class="w-full h-[520px] border-none rounded-lg" loading="lazy" title="夏普比率（真实净值口径）"></iframe>
+                                <div class="text-center py-2 bg-gray-50 border-t border-gray-100">
+                                    <a href="strategy_sharpe_nav.html" target="_blank" class="text-blue-600 hover:text-blue-800 text-sm font-medium transition-colors">
+                                        <i class='fas fa-external-link-alt'></i> 在新窗口打开全屏查看
+                                    </a>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <div class="mb-8">
+                            <div class="bg-white rounded-xl shadow-sm p-1 border-l-4 border-[#e53935] overflow-hidden">
+                                <iframe src="ic_timeseries_light.html" class="w-full h-[520px] border-none rounded-lg" loading="lazy" title="IC时间序列（含极端信号组追踪）"></iframe>
+                                <div class="text-center py-2 bg-gray-50 border-t border-gray-100">
+                                    <a href="ic_timeseries_light.html" target="_blank" class="text-blue-600 hover:text-blue-800 text-sm font-medium transition-colors">
+                                        <i class='fas fa-external-link-alt'></i> 在新窗口打开全屏查看
+                                    </a>
+                                </div>
+                            </div>
+                        </div>
+                        
+                    <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                    
+                        <div class="bg-white rounded-xl shadow-sm p-1 overflow-hidden">
+                            <iframe src="ic_distribution_light.html" class="w-full h-[520px] border-none rounded-lg" loading="lazy" title="IC分布"></iframe>
+                            <div class="text-center py-2 bg-gray-50 border-t border-gray-100">
+                                <a href="ic_distribution_light.html" target="_blank" class="text-blue-600 hover:text-blue-800 text-sm font-medium transition-colors">
+                                    <i class='fas fa-external-link-alt'></i> 在新窗口打开
+                                </a>
+                            </div>
+                        </div>
+                        
+                        <div class="bg-white rounded-xl shadow-sm p-1 overflow-hidden">
+                            <iframe src="ic_stability_regime_light.html" class="w-full h-[520px] border-none rounded-lg" loading="lazy" title="IC按行情分段（T+1）"></iframe>
+                            <div class="text-center py-2 bg-gray-50 border-t border-gray-100">
+                                <a href="ic_stability_regime_light.html" target="_blank" class="text-blue-600 hover:text-blue-800 text-sm font-medium transition-colors">
+                                    <i class='fas fa-external-link-alt'></i> 在新窗口打开
+                                </a>
+                            </div>
+                        </div>
+                        
+                    </div>
+                    
+                </div>
+                <div class="h-px bg-gradient-to-r from-transparent via-gray-200 to-transparent my-10"></div>
+                
+                <div class="mb-12" id="section-predictive-power">
+                    <div class="flex items-center mb-6">
+                        <div class="w-1 h-8 bg-blue-500 rounded-full mr-3"></div>
+                        <h3 class="text-2xl font-bold text-gray-800"><i class='fas fa-bullseye text-red-500'></i> 预测有效性分析</h3>
+                    </div>
+                
+                        <div class="mb-8">
+                            <div class="bg-white rounded-xl shadow-sm p-1 border-l-4 border-[#e53935] overflow-hidden">
+                                <iframe src="pred_real_relationship_light.html" class="w-full h-[520px] border-none rounded-lg" loading="lazy" title="预测值与实际收益关系分析"></iframe>
+                                <div class="text-center py-2 bg-gray-50 border-t border-gray-100">
+                                    <a href="pred_real_relationship_light.html" target="_blank" class="text-blue-600 hover:text-blue-800 text-sm font-medium transition-colors">
+                                        <i class='fas fa-external-link-alt'></i> 在新窗口打开全屏查看
+                                    </a>
+                                </div>
+                            </div>
+                        </div>
+                        
+                </div>
+                <div class="h-px bg-gradient-to-r from-transparent via-gray-200 to-transparent my-10"></div>
+                
+                <div class="mb-12" id="section-portfolio">
+                    <div class="flex items-center mb-6">
+                        <div class="w-1 h-8 bg-blue-500 rounded-full mr-3"></div>
+                        <h3 class="text-2xl font-bold text-gray-800"><i class='fas fa-chart-bar text-indigo-500'></i> 投资组合分析</h3>
+                    </div>
+                
+                        <div class="mb-8 relative" id="page-factor-attribution">
+                            <div class="bg-white rounded-xl shadow-sm p-1 border-l-4 border-[#e53935] overflow-hidden">
+                                <iframe src="factor_attribution_main.html" class="w-full h-[520px] border-none rounded-lg" loading="lazy" title="因子归因（FF3）主页面"></iframe>
+                                <div class="text-center py-2 bg-gray-50 border-t border-gray-100">
+                                    <a href="factor_attribution_main.html" target="_blank" class="text-blue-600 hover:text-blue-800 text-sm font-medium transition-colors">
+                                        <i class='fas fa-external-link-alt'></i> 在新窗口打开全屏查看
+                                    </a>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <div class="mb-8">
+                            <div class="bg-white rounded-xl shadow-sm p-1 border-l-4 border-[#e53935] overflow-hidden">
+                                <iframe src="portfolio_composition_light.html" class="w-full h-[520px] border-none rounded-lg" loading="lazy" title="收盘后持仓市值"></iframe>
+                                <div class="text-center py-2 bg-gray-50 border-t border-gray-100">
+                                    <a href="portfolio_composition_light.html" target="_blank" class="text-blue-600 hover:text-blue-800 text-sm font-medium transition-colors">
+                                        <i class='fas fa-external-link-alt'></i> 在新窗口打开全屏查看
+                                    </a>
+                                </div>
+                            </div>
+                        </div>
+                        
+                    <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                    
+                        <div class="bg-white rounded-xl shadow-sm p-1 overflow-hidden">
+                            <iframe src="factor_exposure_light.html" class="w-full h-[520px] border-none rounded-lg" loading="lazy" title="策略因子特征暴露度"></iframe>
+                            <div class="text-center py-2 bg-gray-50 border-t border-gray-100">
+                                <a href="factor_exposure_light.html" target="_blank" class="text-blue-600 hover:text-blue-800 text-sm font-medium transition-colors">
+                                    <i class='fas fa-external-link-alt'></i> 在新窗口打开
+                                </a>
+                            </div>
+                        </div>
+                        
+                        <div class="bg-white rounded-xl shadow-sm p-1 overflow-hidden">
+                            <iframe src="factor_direction_exposure_light.html" class="w-full h-[520px] border-none rounded-lg" loading="lazy" title="新增仓位多空方向分解"></iframe>
+                            <div class="text-center py-2 bg-gray-50 border-t border-gray-100">
+                                <a href="factor_direction_exposure_light.html" target="_blank" class="text-blue-600 hover:text-blue-800 text-sm font-medium transition-colors">
+                                    <i class='fas fa-external-link-alt'></i> 在新窗口打开
+                                </a>
+                            </div>
+                        </div>
+                        
+                        <div class="bg-white rounded-xl shadow-sm p-1 overflow-hidden">
+                            <iframe src="amount_by_market_cap_pie_light.html" class="w-full h-[520px] border-none rounded-lg" loading="lazy" title="按市值大小的交易/盈利占比"></iframe>
+                            <div class="text-center py-2 bg-gray-50 border-t border-gray-100">
+                                <a href="amount_by_market_cap_pie_light.html" target="_blank" class="text-blue-600 hover:text-blue-800 text-sm font-medium transition-colors">
+                                    <i class='fas fa-external-link-alt'></i> 在新窗口打开
+                                </a>
+                            </div>
+                        </div>
+                        
+                        <div class="bg-white rounded-xl shadow-sm p-1 overflow-hidden">
+                            <iframe src="amount_by_industry_pie_light.html" class="w-full h-[520px] border-none rounded-lg" loading="lazy" title="按行业的交易/盈利占比"></iframe>
+                            <div class="text-center py-2 bg-gray-50 border-t border-gray-100">
+                                <a href="amount_by_industry_pie_light.html" target="_blank" class="text-blue-600 hover:text-blue-800 text-sm font-medium transition-colors">
+                                    <i class='fas fa-external-link-alt'></i> 在新窗口打开
+                                </a>
+                            </div>
+                        </div>
+                        
+                        <div class="bg-white rounded-xl shadow-sm p-1 overflow-hidden">
+                            <iframe src="amount_by_board_pie_light.html" class="w-full h-[520px] border-none rounded-lg" loading="lazy" title="按交易所板块的交易/盈利占比"></iframe>
+                            <div class="text-center py-2 bg-gray-50 border-t border-gray-100">
+                                <a href="amount_by_board_pie_light.html" target="_blank" class="text-blue-600 hover:text-blue-800 text-sm font-medium transition-colors">
+                                    <i class='fas fa-external-link-alt'></i> 在新窗口打开
+                                </a>
+                            </div>
+                        </div>
+                        
+                    </div>
+                    
+                </div>
+                <div class="h-px bg-gradient-to-r from-transparent via-gray-200 to-transparent my-10"></div>
+                
+                <div class="mb-12" id="section-trading-execution">
+                    <div class="flex items-center mb-6">
+                        <div class="w-1 h-8 bg-blue-500 rounded-full mr-3"></div>
+                        <h3 class="text-2xl font-bold text-gray-800"><i class='fas fa-bolt text-yellow-400'></i> 交易执行分析</h3>
+                    </div>
+                
+                        <div class="mb-8 relative" data-page-id="entry_exit_rank_baostock_full" id="page-entry-exit">
+                            <div class="bg-white rounded-xl shadow-sm p-1 border-l-4 border-[#e53935] overflow-hidden">
+                                <iframe src="entry_exit_rank_baostock_full.html" class="w-full h-[520px] border-none rounded-lg" loading="lazy" title="择时能力分布（5min行情，全量）"></iframe>
+                                <div class="text-center py-2 bg-gray-50 border-t border-gray-100">
+                                    <a href="entry_exit_rank_baostock_full.html" target="_blank" class="text-blue-600 hover:text-blue-800 text-sm font-medium transition-colors">
+                                        <i class='fas fa-external-link-alt'></i> 在新窗口打开全屏查看
+                                    </a>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <div class="mb-8">
+                            <div class="bg-white rounded-xl shadow-sm p-1 border-l-4 border-[#e53935] overflow-hidden">
+                                <iframe src="fill_rate_timeseries_light.html" class="w-full h-[520px] border-none rounded-lg" loading="lazy" title="成交率时间序列"></iframe>
+                                <div class="text-center py-2 bg-gray-50 border-t border-gray-100">
+                                    <a href="fill_rate_timeseries_light.html" target="_blank" class="text-blue-600 hover:text-blue-800 text-sm font-medium transition-colors">
+                                        <i class='fas fa-external-link-alt'></i> 在新窗口打开全屏查看
+                                    </a>
+                                </div>
+                            </div>
+                        </div>
+                        
+                    <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                    
+                        <div class="bg-white rounded-xl shadow-sm p-1 overflow-hidden relative" data-page-id="intraday_avg_holding_time_light">
+                            <iframe src="intraday_avg_holding_time_light.html" class="w-full h-[520px] border-none rounded-lg" loading="lazy" title="交易平均持仓时间（按买入日，按交易时段计）"></iframe>
+                            <div class="text-center py-2 bg-gray-50 border-t border-gray-100">
+                                <a href="intraday_avg_holding_time_light.html" target="_blank" class="text-blue-600 hover:text-blue-800 text-sm font-medium transition-colors">
+                                    <i class='fas fa-external-link-alt'></i> 在新窗口打开
+                                </a>
+                            </div>
+                        </div>
+                        
+                        <div class="bg-white rounded-xl shadow-sm p-1 overflow-hidden">
+                            <iframe src="fill_rate_distribution_light.html" class="w-full h-[520px] border-none rounded-lg" loading="lazy" title="成交率分布"></iframe>
+                            <div class="text-center py-2 bg-gray-50 border-t border-gray-100">
+                                <a href="fill_rate_distribution_light.html" target="_blank" class="text-blue-600 hover:text-blue-800 text-sm font-medium transition-colors">
+                                    <i class='fas fa-external-link-alt'></i> 在新窗口打开
+                                </a>
+                            </div>
+                        </div>
+                        
+                    </div>
+                    
+                </div>
+                <div class="h-px bg-gradient-to-r from-transparent via-gray-200 to-transparent my-10"></div>
+                
+                <div class="mb-12" id="section-slippage-cost">
+                    <div class="flex items-center mb-6">
+                        <div class="w-1 h-8 bg-blue-500 rounded-full mr-3"></div>
+                        <h3 class="text-2xl font-bold text-gray-800"><i class='fas fa-money-bill-wave text-green-600'></i> 滑点成本分析</h3>
+                    </div>
+                
+                        <div class="mb-8">
+                            <div class="bg-white rounded-xl shadow-sm p-1 border-l-4 border-[#e53935] overflow-hidden">
+                                <iframe src="total_cost_light.html" class="w-full h-[520px] border-none rounded-lg" loading="lazy" title="综合交易成本分析"></iframe>
+                                <div class="text-center py-2 bg-gray-50 border-t border-gray-100">
+                                    <a href="total_cost_light.html" target="_blank" class="text-blue-600 hover:text-blue-800 text-sm font-medium transition-colors">
+                                        <i class='fas fa-external-link-alt'></i> 在新窗口打开全屏查看
+                                    </a>
+                                </div>
+                            </div>
+                        </div>
+                        
+                    <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                    
+                        <div class="bg-white rounded-xl shadow-sm p-1 overflow-hidden">
+                            <iframe src="time_slippage_light.html" class="w-full h-[520px] border-none rounded-lg" loading="lazy" title="时间滑点分析"></iframe>
+                            <div class="text-center py-2 bg-gray-50 border-t border-gray-100">
+                                <a href="time_slippage_light.html" target="_blank" class="text-blue-600 hover:text-blue-800 text-sm font-medium transition-colors">
+                                    <i class='fas fa-external-link-alt'></i> 在新窗口打开
+                                </a>
+                            </div>
+                        </div>
+                        
+                        <div class="bg-white rounded-xl shadow-sm p-1 overflow-hidden">
+                            <iframe src="price_slippage_light.html" class="w-full h-[520px] border-none rounded-lg" loading="lazy" title="价格滑点分析"></iframe>
+                            <div class="text-center py-2 bg-gray-50 border-t border-gray-100">
+                                <a href="price_slippage_light.html" target="_blank" class="text-blue-600 hover:text-blue-800 text-sm font-medium transition-colors">
+                                    <i class='fas fa-external-link-alt'></i> 在新窗口打开
+                                </a>
+                            </div>
+                        </div>
+                        
+                    </div>
+                    
+                </div>
+                <div class="h-px bg-gradient-to-r from-transparent via-gray-200 to-transparent my-10"></div>
+                
+                <div class="mb-12" id="section-time-slot-profit">
+                    <div class="flex items-center mb-6">
+                        <div class="w-1 h-8 bg-blue-500 rounded-full mr-3"></div>
+                        <h3 class="text-2xl font-bold text-gray-800"><i class='fas fa-clock text-blue-400'></i> 时段盈利能力分析</h3>
+                    </div>
+                
+                        <div class="mb-8">
+                            <div class="bg-white rounded-xl shadow-sm p-1 border-l-4 border-[#e53935] overflow-hidden">
+                                <iframe src="slot_intraday_profit_waterfall_light.html" class="w-full h-[520px] border-none rounded-lg" loading="lazy" title="日内时段绝对收益瀑布图（全样本期总贡献）"></iframe>
+                                <div class="text-center py-2 bg-gray-50 border-t border-gray-100">
+                                    <a href="slot_intraday_profit_waterfall_light.html" target="_blank" class="text-blue-600 hover:text-blue-800 text-sm font-medium transition-colors">
+                                        <i class='fas fa-external-link-alt'></i> 在新窗口打开全屏查看
+                                    </a>
+                                </div>
+                            </div>
+                        </div>
+                        
+                    <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                    
+                        <div class="bg-white rounded-xl shadow-sm p-1 overflow-hidden">
+                            <iframe src="time_slot_performance_analysis_light.html" class="w-full h-[520px] border-none rounded-lg" loading="lazy" title="时段平均净收益率分析"></iframe>
+                            <div class="text-center py-2 bg-gray-50 border-t border-gray-100">
+                                <a href="time_slot_performance_analysis_light.html" target="_blank" class="text-blue-600 hover:text-blue-800 text-sm font-medium transition-colors">
+                                    <i class='fas fa-external-link-alt'></i> 在新窗口打开
+                                </a>
+                            </div>
+                        </div>
+                        
+                        <div class="bg-white rounded-xl shadow-sm p-1 overflow-hidden">
+                            <iframe src="time_slot_significance_test_light.html" class="w-full h-[520px] border-none rounded-lg" loading="lazy" title="时段收益显著性检验"></iframe>
+                            <div class="text-center py-2 bg-gray-50 border-t border-gray-100">
+                                <a href="time_slot_significance_test_light.html" target="_blank" class="text-blue-600 hover:text-blue-800 text-sm font-medium transition-colors">
+                                    <i class='fas fa-external-link-alt'></i> 在新窗口打开
+                                </a>
+                            </div>
+                        </div>
+                        
+                        <div class="bg-white rounded-xl shadow-sm p-1 overflow-hidden">
+                            <iframe src="time_slot_profit_decomposition_light.html" class="w-full h-[520px] border-none rounded-lg" loading="lazy" title="时段绝对收益分解"></iframe>
+                            <div class="text-center py-2 bg-gray-50 border-t border-gray-100">
+                                <a href="time_slot_profit_decomposition_light.html" target="_blank" class="text-blue-600 hover:text-blue-800 text-sm font-medium transition-colors">
+                                    <i class='fas fa-external-link-alt'></i> 在新窗口打开
+                                </a>
+                            </div>
+                        </div>
+                        
+                        <div class="bg-white rounded-xl shadow-sm p-1 overflow-hidden">
+                            <iframe src="time_slot_returns_boxplot_light.html" class="w-full h-[520px] border-none rounded-lg" loading="lazy" title="时段收益分布箱线图"></iframe>
+                            <div class="text-center py-2 bg-gray-50 border-t border-gray-100">
+                                <a href="time_slot_returns_boxplot_light.html" target="_blank" class="text-blue-600 hover:text-blue-800 text-sm font-medium transition-colors">
+                                    <i class='fas fa-external-link-alt'></i> 在新窗口打开
+                                </a>
+                            </div>
+                        </div>
+                        
+                        <div class="bg-white rounded-xl shadow-sm p-1 overflow-hidden">
+                            <iframe src="time_slot_risk_return_bubble_light.html" class="w-full h-[520px] border-none rounded-lg" loading="lazy" title="时段风险-收益气泡图"></iframe>
+                            <div class="text-center py-2 bg-gray-50 border-t border-gray-100">
+                                <a href="time_slot_risk_return_bubble_light.html" target="_blank" class="text-blue-600 hover:text-blue-800 text-sm font-medium transition-colors">
+                                    <i class='fas fa-external-link-alt'></i> 在新窗口打开
+                                </a>
+                            </div>
+                        </div>
+                        
+                        <div class="bg-white rounded-xl shadow-sm p-1 overflow-hidden">
+                            <iframe src="time_slot_opening_closing_analysis_light.html" class="w-full h-[520px] border-none rounded-lg" loading="lazy" title="开盘尾盘精细分析（5分钟）"></iframe>
+                            <div class="text-center py-2 bg-gray-50 border-t border-gray-100">
+                                <a href="time_slot_opening_closing_analysis_light.html" target="_blank" class="text-blue-600 hover:text-blue-800 text-sm font-medium transition-colors">
+                                    <i class='fas fa-external-link-alt'></i> 在新窗口打开
+                                </a>
+                            </div>
+                        </div>
+                        
+                        <div class="bg-white rounded-xl shadow-sm p-1 overflow-hidden">
+                            <iframe src="time_slot_market_regime_heatmap_light.html" class="w-full h-[520px] border-none rounded-lg" loading="lazy" title="涨跌日分面热力图"></iframe>
+                            <div class="text-center py-2 bg-gray-50 border-t border-gray-100">
+                                <a href="time_slot_market_regime_heatmap_light.html" target="_blank" class="text-blue-600 hover:text-blue-800 text-sm font-medium transition-colors">
+                                    <i class='fas fa-external-link-alt'></i> 在新窗口打开
+                                </a>
+                            </div>
+                        </div>
+                        
+                        <div class="bg-white rounded-xl shadow-sm p-1 overflow-hidden">
+                            <iframe src="time_slot_profit_heatmap_light.html" class="w-full h-[520px] border-none rounded-lg" loading="lazy" title="星期×时段绝对盈利热力图"></iframe>
+                            <div class="text-center py-2 bg-gray-50 border-t border-gray-100">
+                                <a href="time_slot_profit_heatmap_light.html" target="_blank" class="text-blue-600 hover:text-blue-800 text-sm font-medium transition-colors">
+                                    <i class='fas fa-external-link-alt'></i> 在新窗口打开
+                                </a>
+                            </div>
+                        </div>
+                        
+                    </div>
+                    
+                </div>
+                <div class="h-px bg-gradient-to-r from-transparent via-gray-200 to-transparent my-10"></div>
+                
+                <script>
+                    (function() {
+                        var badgeConfig = {
+                            "new": ["entry_exit_rank_baostock_full"],
+                            "upgrade": [
+                                "daily_returns_comparison_light",
+                                "returns_distribution_light",
+                                "daily_returns_initial_capital_light",
+                                "strategy_vs_benchmark_light",
+                                "strategy_sharpe_nav",
+                                "intraday_avg_holding_time_light"
+                            ]
+                        };
+                        var colors = { "new": "bg-red-500 text-white", "upgrade": "bg-blue-600 text-white" };
+                        if ('scrollRestoration' in history) {
+                            history.scrollRestoration = 'manual';
+                        }
+                        document.querySelectorAll('[data-target]').forEach(function(btn) {
+                            btn.addEventListener('click', function(e) {
+                                e.preventDefault();
+                                var targetId = this.getAttribute('data-target');
+                                var el = document.getElementById(targetId);
+                                if (el) {
+                                    el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                                }
+                            });
+                        });
+                        document.querySelectorAll('[data-page-id]').forEach(function(card) {
+                            var pid = card.getAttribute('data-page-id');
+                            var label = null;
+                            var type = null;
+                            if (badgeConfig.new.indexOf(pid) !== -1) {
+                                label = 'NEW';
+                                type = 'new';
+                            } else if (badgeConfig.upgrade.indexOf(pid) !== -1) {
+                                label = 'UPGRADE';
+                                type = 'upgrade';
+                            }
+                            if (!label) return;
+                            card.classList.add('relative');
+                            var badge = document.createElement('span');
+                            badge.textContent = label;
+                            badge.className = 'absolute top-2 left-2 z-10 pointer-events-none text-[10px] font-semibold px-2 py-[2px] rounded-full shadow-sm ' + colors[type];
+                            card.appendChild(badge);
+                        });
+                    })();
+                </script>
+                <footer class="text-center text-gray-400 text-sm py-8">
+                    <p><i class='fas fa-bullseye text-red-500'></i> 高效设计 · <i class='fas fa-rocket text-blue-500'></i> 快速分析 · <i class='fas fa-chart-bar text-indigo-500'></i> 专业洞察</p>
+                    <p class="mt-1">优化策略: 智能采样 + CDN加载 + 数据压缩 + Tailwind CSS</p>
+                </footer>
+            </div>
+        </body>
+        </html>
+        

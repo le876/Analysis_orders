@@ -1,0 +1,94 @@
+
+            <!DOCTYPE html>
+            <html>
+            <head>
+                <meta charset="utf-8" />
+                <meta name="viewport" content="width=device-width, initial-scale=1" />
+                <title>时段平均净收益率分析</title>
+                <script src="https://cdn.plot.ly/plotly-latest.min.js"></script>
+                <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+                <script src="https://cdn.tailwindcss.com"></script>
+                <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+                <style>
+                    body { font-family: "Noto Sans SC","Microsoft YaHei","Segoe UI",sans-serif; }
+                    .markdown-body h3 { font-size: 1.05rem; margin-top: 1rem; margin-bottom: .45rem; }
+                    .markdown-body p { margin: .35rem 0; color: #374151; line-height: 1.65; }
+                    .markdown-body ul { margin: .25rem 0 .5rem 1.2rem; color: #374151; line-height: 1.6; list-style: disc; }
+                    .markdown-body li { margin: .2rem 0; }
+                </style>
+                <script>
+                    window.MathJax = {
+                        tex: {
+                            inlineMath: [["$","$"],["\(","\)"]],
+                            displayMath: [["$$","$$"],["\[","\]"]],
+                            processEscapes: true
+                        },
+                        options: { skipHtmlTags: ["script","noscript","style","textarea","pre","code"] },
+                        svg: { fontCache: 'global' }
+                    };
+                </script>
+                <script id="MathJax-script" async src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-chtml-full.js" onerror="this.onerror=null; this.src='../assets/mathjax/tex-chtml-full.js';"></script>
+            </head>
+            <body class="bg-gray-50">
+                <header class="sticky top-0 z-30 bg-white shadow-sm border-b border-gray-100">
+                    <div class="max-w-7xl mx-auto px-4 sm:px-6 py-3 flex items-center justify-between">
+                        <div>
+                            <p class="text-[11px] tracking-[0.18em] text-gray-500 uppercase">时段分析</p>
+                            <h1 class="text-xl font-semibold text-gray-900">时段平均净收益率分析</h1>
+                        </div>
+                        <div class="text-xs text-gray-500">滚动查看完整内容</div>
+                    </div>
+                </header>
+                <main class="max-w-7xl mx-auto px-4 sm:px-6 py-6">
+                    <div class="bg-white rounded-lg shadow-sm p-6" id="page-root">
+                        <div id="main-chart" class="mb-6">
+                            
+            <div id="time_slot_performance_analysis_light" class="plotly-graph-div" style="height:420px; width:100%;"></div>
+            <script type="text/javascript">
+                window.PLOTLYENV=window.PLOTLYENV || {};
+                (function() {
+                    var fig = {"data": [{"hovertemplate": "时段 %{x}<br>平均净收益率 %{y:.2%}<extra></extra>", "marker": {"color": ["#e53935", "#e53935", "#e53935", "#e53935", "#e53935", "#e53935", "#e53935", "#e53935", "#e53935", "#e53935", "#e53935", "#e53935", "#e53935", "#e53935", "#e53935", "#e53935", "#e53935", "#e53935", "#e53935", "#e53935", "#e53935", "#e53935", "#e53935", "#e53935", "#e53935", "#e53935", "#e53935", "#e53935", "#e53935", "#e53935", "#e53935", "#e53935", "#e53935", "#e53935", "#e53935", "#e53935", "#e53935", "#43a047", "#43a047", "#43a047", "#43a047", "#43a047", "#43a047", "#43a047", "#43a047", "#43a047", "#43a047", "#e53935", "#e53935", "#e53935"]}, "name": "平均净收益率", "text": ["0.51%", "0.17%", "0.11%", "0.07%", "0.07%", "0.09%", "0.05%", "0.06%", "0.06%", "0.06%", "0.09%", "0.08%", "0.10%", "0.10%", "0.09%", "0.11%", "0.10%", "0.10%", "0.13%", "0.09%", "0.14%", "0.12%", "0.13%", "0.12%", "0.00%", "0.17%", "0.14%", "0.13%", "0.10%", "0.08%", "0.07%", "0.07%", "0.07%", "0.10%", "0.08%", "0.03%", "0.04%", "-0.00%", "-0.01%", "-0.05%", "-0.04%", "-0.05%", "-0.05%", "-0.02%", "-0.03%", "-0.02%", "-0.01%", "0.00%", "0.10%", "0.00%"], "textposition": "outside", "x": ["09:30", "09:35", "09:40", "09:45", "09:50", "09:55", "10:00", "10:05", "10:10", "10:15", "10:20", "10:25", "10:30", "10:35", "10:40", "10:45", "10:50", "10:55", "11:00", "11:05", "11:10", "11:15", "11:20", "11:25", "11:30", "13:00", "13:05", "13:10", "13:15", "13:20", "13:25", "13:30", "13:35", "13:40", "13:45", "13:50", "13:55", "14:00", "14:05", "14:10", "14:15", "14:20", "14:25", "14:30", "14:35", "14:40", "14:45", "14:50", "14:55", "15:00"], "y": [0.0051486944099175145, 0.00165880905120828, 0.001133812260876147, 0.0006810008287990409, 0.0007466240370294235, 0.000892455892432231, 0.0005296384238057026, 0.000576681806808382, 0.000566432303575238, 0.000623848396832488, 0.0009182185432894825, 0.0007680466931164762, 0.0009878140169778558, 0.0009926240008096398, 0.0008665226741882358, 0.0010935316933781284, 0.0010145498242104384, 0.0010243931352997627, 0.0013138988456792287, 0.0009170900728989637, 0.0013544347157542558, 0.0011702654932782416, 0.0013025246367278879, 0.0011668527365724774, 0.0, 0.0016878256252417648, 0.0014302676190786332, 0.0012559522669916311, 0.0010112743562040963, 0.0008217584635205178, 0.0006626995198798504, 0.0007080344035029684, 0.0006712692599310407, 0.0010344672807605791, 0.0007770824726301234, 0.0002920707468520255, 0.00043481222531465053, -2.9253120297331567e-05, -0.00014788944718241225, -0.00048511414655149265, -0.0003778502894040768, -0.0004947247136951248, -0.00046317881719738644, -0.00021556246096568176, -0.0002587668261400916, -0.000180411840943757, -0.00010421355928955739, 8.331857081591885e-06, 0.001042986251019805, 0.0], "type": "bar"}], "layout": {"template": {"data": {"histogram2dcontour": [{"type": "histogram2dcontour", "colorbar": {"outlinewidth": 0, "ticks": ""}, "colorscale": [[0.0, "#0d0887"], [0.1111111111111111, "#46039f"], [0.2222222222222222, "#7201a8"], [0.3333333333333333, "#9c179e"], [0.4444444444444444, "#bd3786"], [0.5555555555555556, "#d8576b"], [0.6666666666666666, "#ed7953"], [0.7777777777777778, "#fb9f3a"], [0.8888888888888888, "#fdca26"], [1.0, "#f0f921"]]}], "choropleth": [{"type": "choropleth", "colorbar": {"outlinewidth": 0, "ticks": ""}}], "histogram2d": [{"type": "histogram2d", "colorbar": {"outlinewidth": 0, "ticks": ""}, "colorscale": [[0.0, "#0d0887"], [0.1111111111111111, "#46039f"], [0.2222222222222222, "#7201a8"], [0.3333333333333333, "#9c179e"], [0.4444444444444444, "#bd3786"], [0.5555555555555556, "#d8576b"], [0.6666666666666666, "#ed7953"], [0.7777777777777778, "#fb9f3a"], [0.8888888888888888, "#fdca26"], [1.0, "#f0f921"]]}], "heatmap": [{"type": "heatmap", "colorbar": {"outlinewidth": 0, "ticks": ""}, "colorscale": [[0.0, "#0d0887"], [0.1111111111111111, "#46039f"], [0.2222222222222222, "#7201a8"], [0.3333333333333333, "#9c179e"], [0.4444444444444444, "#bd3786"], [0.5555555555555556, "#d8576b"], [0.6666666666666666, "#ed7953"], [0.7777777777777778, "#fb9f3a"], [0.8888888888888888, "#fdca26"], [1.0, "#f0f921"]]}], "contourcarpet": [{"type": "contourcarpet", "colorbar": {"outlinewidth": 0, "ticks": ""}}], "contour": [{"type": "contour", "colorbar": {"outlinewidth": 0, "ticks": ""}, "colorscale": [[0.0, "#0d0887"], [0.1111111111111111, "#46039f"], [0.2222222222222222, "#7201a8"], [0.3333333333333333, "#9c179e"], [0.4444444444444444, "#bd3786"], [0.5555555555555556, "#d8576b"], [0.6666666666666666, "#ed7953"], [0.7777777777777778, "#fb9f3a"], [0.8888888888888888, "#fdca26"], [1.0, "#f0f921"]]}], "surface": [{"type": "surface", "colorbar": {"outlinewidth": 0, "ticks": ""}, "colorscale": [[0.0, "#0d0887"], [0.1111111111111111, "#46039f"], [0.2222222222222222, "#7201a8"], [0.3333333333333333, "#9c179e"], [0.4444444444444444, "#bd3786"], [0.5555555555555556, "#d8576b"], [0.6666666666666666, "#ed7953"], [0.7777777777777778, "#fb9f3a"], [0.8888888888888888, "#fdca26"], [1.0, "#f0f921"]]}], "mesh3d": [{"type": "mesh3d", "colorbar": {"outlinewidth": 0, "ticks": ""}}], "scatter": [{"fillpattern": {"fillmode": "overlay", "size": 10, "solidity": 0.2}, "type": "scatter"}], "parcoords": [{"type": "parcoords", "line": {"colorbar": {"outlinewidth": 0, "ticks": ""}}}], "scatterpolargl": [{"type": "scatterpolargl", "marker": {"colorbar": {"outlinewidth": 0, "ticks": ""}}}], "bar": [{"error_x": {"color": "#2a3f5f"}, "error_y": {"color": "#2a3f5f"}, "marker": {"line": {"color": "#E5ECF6", "width": 0.5}, "pattern": {"fillmode": "overlay", "size": 10, "solidity": 0.2}}, "type": "bar"}], "scattergeo": [{"type": "scattergeo", "marker": {"colorbar": {"outlinewidth": 0, "ticks": ""}}}], "scatterpolar": [{"type": "scatterpolar", "marker": {"colorbar": {"outlinewidth": 0, "ticks": ""}}}], "histogram": [{"marker": {"pattern": {"fillmode": "overlay", "size": 10, "solidity": 0.2}}, "type": "histogram"}], "scattergl": [{"type": "scattergl", "marker": {"colorbar": {"outlinewidth": 0, "ticks": ""}}}], "scatter3d": [{"type": "scatter3d", "line": {"colorbar": {"outlinewidth": 0, "ticks": ""}}, "marker": {"colorbar": {"outlinewidth": 0, "ticks": ""}}}], "scattermap": [{"type": "scattermap", "marker": {"colorbar": {"outlinewidth": 0, "ticks": ""}}}], "scattermapbox": [{"type": "scattermapbox", "marker": {"colorbar": {"outlinewidth": 0, "ticks": ""}}}], "scatterternary": [{"type": "scatterternary", "marker": {"colorbar": {"outlinewidth": 0, "ticks": ""}}}], "scattercarpet": [{"type": "scattercarpet", "marker": {"colorbar": {"outlinewidth": 0, "ticks": ""}}}], "carpet": [{"aaxis": {"endlinecolor": "#2a3f5f", "gridcolor": "white", "linecolor": "white", "minorgridcolor": "white", "startlinecolor": "#2a3f5f"}, "baxis": {"endlinecolor": "#2a3f5f", "gridcolor": "white", "linecolor": "white", "minorgridcolor": "white", "startlinecolor": "#2a3f5f"}, "type": "carpet"}], "table": [{"cells": {"fill": {"color": "#EBF0F8"}, "line": {"color": "white"}}, "header": {"fill": {"color": "#C8D4E3"}, "line": {"color": "white"}}, "type": "table"}], "barpolar": [{"marker": {"line": {"color": "#E5ECF6", "width": 0.5}, "pattern": {"fillmode": "overlay", "size": 10, "solidity": 0.2}}, "type": "barpolar"}], "pie": [{"automargin": true, "type": "pie"}]}, "layout": {"autotypenumbers": "strict", "colorway": ["#636efa", "#EF553B", "#00cc96", "#ab63fa", "#FFA15A", "#19d3f3", "#FF6692", "#B6E880", "#FF97FF", "#FECB52"], "font": {"color": "#2a3f5f"}, "hovermode": "closest", "hoverlabel": {"align": "left"}, "paper_bgcolor": "white", "plot_bgcolor": "#E5ECF6", "polar": {"bgcolor": "#E5ECF6", "angularaxis": {"gridcolor": "white", "linecolor": "white", "ticks": ""}, "radialaxis": {"gridcolor": "white", "linecolor": "white", "ticks": ""}}, "ternary": {"bgcolor": "#E5ECF6", "aaxis": {"gridcolor": "white", "linecolor": "white", "ticks": ""}, "baxis": {"gridcolor": "white", "linecolor": "white", "ticks": ""}, "caxis": {"gridcolor": "white", "linecolor": "white", "ticks": ""}}, "coloraxis": {"colorbar": {"outlinewidth": 0, "ticks": ""}}, "colorscale": {"sequential": [[0.0, "#0d0887"], [0.1111111111111111, "#46039f"], [0.2222222222222222, "#7201a8"], [0.3333333333333333, "#9c179e"], [0.4444444444444444, "#bd3786"], [0.5555555555555556, "#d8576b"], [0.6666666666666666, "#ed7953"], [0.7777777777777778, "#fb9f3a"], [0.8888888888888888, "#fdca26"], [1.0, "#f0f921"]], "sequentialminus": [[0.0, "#0d0887"], [0.1111111111111111, "#46039f"], [0.2222222222222222, "#7201a8"], [0.3333333333333333, "#9c179e"], [0.4444444444444444, "#bd3786"], [0.5555555555555556, "#d8576b"], [0.6666666666666666, "#ed7953"], [0.7777777777777778, "#fb9f3a"], [0.8888888888888888, "#fdca26"], [1.0, "#f0f921"]], "diverging": [[0, "#8e0152"], [0.1, "#c51b7d"], [0.2, "#de77ae"], [0.3, "#f1b6da"], [0.4, "#fde0ef"], [0.5, "#f7f7f7"], [0.6, "#e6f5d0"], [0.7, "#b8e186"], [0.8, "#7fbc41"], [0.9, "#4d9221"], [1, "#276419"]]}, "xaxis": {"gridcolor": "white", "linecolor": "white", "ticks": "", "title": {"standoff": 15}, "zerolinecolor": "white", "automargin": true, "zerolinewidth": 2}, "yaxis": {"gridcolor": "white", "linecolor": "white", "ticks": "", "title": {"standoff": 15}, "zerolinecolor": "white", "automargin": true, "zerolinewidth": 2}, "scene": {"xaxis": {"backgroundcolor": "#E5ECF6", "gridcolor": "white", "linecolor": "white", "showbackground": true, "ticks": "", "zerolinecolor": "white", "gridwidth": 2}, "yaxis": {"backgroundcolor": "#E5ECF6", "gridcolor": "white", "linecolor": "white", "showbackground": true, "ticks": "", "zerolinecolor": "white", "gridwidth": 2}, "zaxis": {"backgroundcolor": "#E5ECF6", "gridcolor": "white", "linecolor": "white", "showbackground": true, "ticks": "", "zerolinecolor": "white", "gridwidth": 2}}, "shapedefaults": {"line": {"color": "#2a3f5f"}}, "annotationdefaults": {"arrowcolor": "#2a3f5f", "arrowhead": 0, "arrowwidth": 1}, "geo": {"bgcolor": "white", "landcolor": "#E5ECF6", "subunitcolor": "white", "showland": true, "showlakes": true, "lakecolor": "white"}, "title": {"x": 0.05}, "mapbox": {"style": "light"}}}, "shapes": [{"line": {"color": "gray", "dash": "dot"}, "type": "line", "x0": 0, "x1": 1, "xref": "x domain", "y0": 0, "y1": 0, "yref": "y"}], "title": {"text": "时段平均净收益率分析"}, "xaxis": {"title": {"text": "时段(5分钟)"}, "showgrid": false, "zeroline": false}, "yaxis": {"title": {"text": "平均净收益率"}, "tickformat": ".2%", "showgrid": true, "gridcolor": "#e5e7eb", "zeroline": true, "zerolinecolor": "#9ca3af"}, "height": 420, "font": {"family": "Noto Sans SC, \"Microsoft YaHei\", \"Segoe UI\", sans-serif"}, "margin": {"t": 30, "b": 40, "l": 60, "r": 20}, "hovermode": "x unified", "paper_bgcolor": "rgba(0,0,0,0)", "plot_bgcolor": "rgba(0,0,0,0)"}};
+                    var cfg = {"displayModeBar": false, "displaylogo": false, "modeBarButtonsToRemove": ["pan2d", "lasso2d"]};
+                    if (document.getElementById("time_slot_performance_analysis_light")) {
+                        Plotly.newPlot("time_slot_performance_analysis_light", fig.data || [], fig.layout || {}, cfg);
+                    }
+                })();
+            </script>
+            
+                        </div>
+                        
+                        <div id="explain-md" class="markdown-body mt-4"></div>
+                    </div>
+                </main>
+                <script>
+                    (function ensureRender(){
+                        var mdText = "- 将每笔闭环交易的收益率（绝对盈利÷买入金额）按卖出时刻所在的 5 分钟时段求均值。\n- 仅覆盖 09:30-11:30 与 13:00-15:00 的交易时段，用于识别高低效时段。";
+                        var mdTarget = document.getElementById('explain-md');
+                        if (mdTarget){
+                            if (window.marked) {
+                                mdTarget.innerHTML = marked.parse(mdText);
+                            } else {
+                                mdTarget.textContent = mdText;
+                            }
+                        }
+                        var anchor = document.getElementById('main-chart');
+                        if (anchor) {
+                            requestAnimationFrame(function() {
+                                anchor.scrollIntoView({ behavior: 'auto', block: 'start' });
+                            });
+                        }
+                        function typeset() {
+                            if (window.MathJax && window.MathJax.typesetPromise) {
+                                window.MathJax.typesetPromise().catch(function(err){ console.warn('MathJax error:', err); });
+                            }
+                        }
+                        if (document.readyState === 'complete') {
+                            typeset();
+                        } else {
+                            window.addEventListener('load', typeset);
+                        }
+                    })();
+                </script>
+            </body>
+            </html>
+            

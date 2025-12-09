@@ -1,9 +1,12 @@
 ﻿data/
 mtm_analysis_results/
-reports/
+docs/
 *.pyc
 __pycache__/
 .DS_Store
 quant_env/
 .conda_pkgs/
 .env.tushare
+.gemini
+ssh在线预览网页.md
+使用tmux终端.md
