@@ -34,7 +34,7 @@ mkdir -p logs && \
   nice -n 5 /home/ubuntu/.conda/envs/quant_env/bin/python scripts/run_entry_exit_rank_baostock.py --recompute --workers 8 \
   | tee logs/entry_exit_rank_baostock_$(date +%Y%m%d%H%M).log
 
-  mkdir -p logs && \
+mkdir -p logs && \
   HTTP_PROXY= HTTPS_PROXY= http_proxy= https_proxy= PYTHONUNBUFFERED=1 \
   nice -n 5 /home/ubuntu/.conda/envs/quant_env/bin/python scripts/run_entry_exit_rank_baostock.py --recompute --workers 6 \
   | tee logs/entry_exit_rank_baostock_$(date +%Y%m%d%H%M).log

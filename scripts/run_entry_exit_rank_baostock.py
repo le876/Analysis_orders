@@ -18,11 +18,11 @@ import argparse
 import baostock as bs
 import json
 import pandas as pd
-import numpy as np
 from datetime import timedelta
 from pathlib import Path
 import plotly.graph_objects as go
 import uuid
+import numpy as np
 
 T_GLOBAL = 234      # 全体交易窗口（分钟）
 T_SHORT = 5         # 超短单窗口（分钟）
@@ -32,6 +32,7 @@ REPORT_TXT = Path('docs/entry_exit_rank_baostock_full.txt')
 COPY_HTML_TARGETS = []
 CACHE_DIR = Path('data/cache/baostock_5min')
 RESULT_CACHE = Path('data/cache/entry_exit_rank_baostock_result.json')
+RNG = np.random.default_rng(42)  # 经验基准抽样用，保证可复现
 
 parser = argparse.ArgumentParser(description='计算 Entry/ExitRank (baostock 5min)')
 parser.add_argument('--recompute', action='store_true', help='忽略结果缓存，重新计算')
@@ -57,7 +58,7 @@ def weighted_percentile(arr, weights, q):
     return arr_sorted[idx]
 
 
-def summarize_hist(data, key, title, bins=30, weights=None):
+def summarize_hist(data, key, title, bins=30, weights=None, baseline_data=None, baseline_weights=None):
     arr = np.asarray(data, dtype=float)
     mask = np.isfinite(arr)
     if weights is not None:
@@ -87,12 +88,30 @@ def summarize_hist(data, key, title, bins=30, weights=None):
             "p25": float(weighted_percentile(arr, w, 25)),
             "p75": float(weighted_percentile(arr, w, 75)),
         }
+    baseline_probs = None
+    if baseline_data is not None:
+        base_arr = np.asarray(baseline_data, dtype=float)
+        base_mask = np.isfinite(base_arr)
+        if baseline_weights is not None:
+            bw = np.asarray(baseline_weights, dtype=float)
+            base_mask = base_mask & np.isfinite(bw) & (bw >= 0)
+            bw = bw[base_mask]
+        else:
+            bw = None
+        base_arr = base_arr[base_mask]
+        if base_arr.size > 0:
+            base_counts, _ = np.histogram(base_arr, bins=bins, range=(0, 1), weights=bw)
+            total = base_counts.sum()
+            if total > 0:
+                baseline_probs = (base_counts / total).tolist()
+
     return {
         "key": key,
         "title": title,
         "counts": counts.tolist(),
         "edges": edges.tolist(),
         "stats": stats,
+        "baseline_probs": baseline_probs,
     }
 
 
@@ -130,7 +149,20 @@ def paired_hist_fig(title, entry_hist, exit_hist, colors=None):
     if len(x_probs) > 0:
         y_max = max(y_max, max(x_probs))
 
-    if len(widths) > 0:
+    base_probs = entry_hist.get("baseline_probs") or exit_hist.get("baseline_probs")
+    if base_probs and len(base_probs) == len(centers):
+        y_max = max(y_max, max(base_probs))
+        fig.add_trace(
+            go.Scatter(
+                x=centers,
+                y=base_probs,
+                mode="lines",
+                name="经验基准",
+                line=dict(color="#9ca3af", width=2, dash="dot"),
+                hovertemplate="Baseline: %{y:.3f}<extra></extra>",
+            )
+        )
+    elif len(widths) > 0:
         base_level = 1 / len(widths)
         y_max = max(y_max, base_level)
         fig.add_trace(
@@ -178,7 +210,20 @@ def single_hist_fig(title, hist, color="#2563eb"):
     y_max = probs_arr.max() if probs_arr.size else 0
     fig = go.Figure()
     fig.add_bar(name="Edge", x=centers, y=probs, width=widths, marker_color=color, opacity=0.78)
-    if len(widths) > 0:
+    base_probs = hist.get("baseline_probs")
+    if base_probs and len(base_probs) == len(centers):
+        y_max = max(y_max, max(base_probs))
+        fig.add_trace(
+            go.Scatter(
+                x=centers,
+                y=base_probs,
+                mode="lines",
+                name="经验基准",
+                line=dict(color="#9ca3af", width=2, dash="dot"),
+                hovertemplate="Baseline: %{y:.3f}<extra></extra>",
+            )
+        )
+    elif len(widths) > 0:
         base_level = 1 / len(widths)
         y_max = max(y_max, base_level)
         fig.add_trace(
@@ -358,8 +403,11 @@ else:
     print(f'📈 标的数量: {len(codes_sorted)}', flush=True)
 
     entries_g = []; exits_g = []; entries_s = []; exits_s = []
+    entries_g_base = []; exits_g_base = []; entries_s_base = []; exits_s_base = []
     entries_g_notional = []; exits_g_notional = []; entries_s_notional = []; exits_s_notional = []
+    entries_g_base_notional = []; exits_g_base_notional = []; entries_s_base_notional = []; exits_s_base_notional = []
     entries_g_pnl = []; exits_g_pnl = []; entries_s_pnl = []; exits_s_pnl = []
+    entries_g_base_pnl = []; exits_g_base_pnl = []; entries_s_base_pnl = []; exits_s_base_pnl = []
     edges_g = []; edges_g_notional = []; edges_g_pnl = []
     edges_s = []; edges_s_notional = []; edges_s_pnl = []
 
@@ -410,8 +458,11 @@ else:
 
         res = {
             "entries_g": [], "exits_g": [], "entries_s": [], "exits_s": [],
+            "entries_g_base": [], "exits_g_base": [], "entries_s_base": [], "exits_s_base": [],
             "entries_g_notional": [], "exits_g_notional": [], "entries_s_notional": [], "exits_s_notional": [],
+            "entries_g_base_notional": [], "exits_g_base_notional": [], "entries_s_base_notional": [], "exits_s_base_notional": [],
             "entries_g_pnl": [], "exits_g_pnl": [], "entries_s_pnl": [], "exits_s_pnl": [],
+            "entries_g_base_pnl": [], "exits_g_base_pnl": [], "entries_s_base_pnl": [], "exits_s_base_pnl": [],
             "edges_g": [], "edges_g_notional": [], "edges_g_pnl": [],
             "edges_s": [], "edges_s_notional": [], "edges_s_pnl": [],
         }
@@ -443,6 +494,16 @@ else:
                 res["entries_g"].append(er)
                 res["entries_g_notional"].append((er, notional_in))
                 res["entries_g_pnl"].append((er, max(pnl, 0)))
+                # 经验基准：随机抽取窗口内一根K线的随机价
+                rand_idx = RNG.integers(0, len(es))
+                low_r, high_r = es['low'].iloc[rand_idx], es['high'].iloc[rand_idx]
+                if np.isfinite(low_r) and np.isfinite(high_r) and hi != lo:
+                    rand_price = RNG.uniform(low_r, high_r)
+                    er_base = (hi - rand_price) / (hi - lo) if row['trade_type'] == 'short' else (rand_price - lo) / (hi - lo)
+                    er_base = max(0.0, min(1.0, er_base))
+                    res["entries_g_base"].append(er_base)
+                    res["entries_g_base_notional"].append((er_base, notional_in))
+                    res["entries_g_base_pnl"].append((er_base, max(pnl, 0)))
 
             # Exit 窗口：开仓 -> 平仓后 T/2（物理分钟）
             x_start = row['open_timestamp']
@@ -455,6 +516,15 @@ else:
                 res["exits_g"].append(xr)
                 res["exits_g_notional"].append((xr, notional_in))
                 res["exits_g_pnl"].append((xr, max(pnl, 0)))
+                rand_idx = RNG.integers(0, len(xs))
+                low_r2, high_r2 = xs['low'].iloc[rand_idx], xs['high'].iloc[rand_idx]
+                if np.isfinite(low_r2) and np.isfinite(high_r2) and hi2 != lo2:
+                    rand_price2 = RNG.uniform(low_r2, high_r2)
+                    xr_base = (rand_price2 - lo2) / (hi2 - lo2) if row['trade_type'] == 'short' else (hi2 - rand_price2) / (hi2 - lo2)
+                    xr_base = max(0.0, min(1.0, xr_base))
+                    res["exits_g_base"].append(xr_base)
+                    res["exits_g_base_notional"].append((xr_base, notional_in))
+                    res["exits_g_base_pnl"].append((xr_base, max(pnl, 0)))
 
             hold_slice = md.loc[(md.index >= row['open_timestamp']) & (md.index <= row['close_timestamp'])]
             if not hold_slice.empty:
@@ -480,6 +550,15 @@ else:
                     res["entries_s"].append(er_s)
                     res["entries_s_notional"].append((er_s, notional_in))
                     res["entries_s_pnl"].append((er_s, max(pnl, 0)))
+                    rand_idx_s = RNG.integers(0, len(es_s))
+                    low_rs, high_rs = es_s['low'].iloc[rand_idx_s], es_s['high'].iloc[rand_idx_s]
+                    if np.isfinite(low_rs) and np.isfinite(high_rs) and hiS != loS:
+                        rand_price_s = RNG.uniform(low_rs, high_rs)
+                        er_s_base = (hiS - rand_price_s) / (hiS - loS) if row['trade_type'] == 'short' else (rand_price_s - loS) / (hiS - loS)
+                        er_s_base = max(0.0, min(1.0, er_s_base))
+                        res["entries_s_base"].append(er_s_base)
+                        res["entries_s_base_notional"].append((er_s_base, notional_in))
+                        res["entries_s_base_pnl"].append((er_s_base, max(pnl, 0)))
                 x_start_s = row['open_timestamp']
                 x_end_s = row['close_timestamp'] + timedelta(minutes=T_SHORT / 2)
                 x_start_s, x_end_s = apply_bounds(x_start_s, x_end_s)
@@ -490,6 +569,15 @@ else:
                     res["exits_s"].append(xr_s)
                     res["exits_s_notional"].append((xr_s, notional_in))
                     res["exits_s_pnl"].append((xr_s, max(pnl, 0)))
+                    rand_idx_s2 = RNG.integers(0, len(xs_s))
+                    low_rs2, high_rs2 = xs_s['low'].iloc[rand_idx_s2], xs_s['high'].iloc[rand_idx_s2]
+                    if np.isfinite(low_rs2) and np.isfinite(high_rs2) and hiS2 != loS2:
+                        rand_price_s2 = RNG.uniform(low_rs2, high_rs2)
+                        xr_s_base = (rand_price_s2 - loS2) / (hiS2 - loS2) if row['trade_type'] == 'short' else (hiS2 - rand_price_s2) / (hiS2 - loS2)
+                        xr_s_base = max(0.0, min(1.0, xr_s_base))
+                        res["exits_s_base"].append(xr_s_base)
+                        res["exits_s_base_notional"].append((xr_s_base, notional_in))
+                        res["exits_s_base_pnl"].append((xr_s_base, max(pnl, 0)))
                 if not hold_slice.empty:
                     res["edges_s"].append(edge)
                     res["edges_s_notional"].append((edge, notional_in))
@@ -535,8 +623,11 @@ else:
     # 聚合并行结果
     agg_keys = [
         "entries_g", "exits_g", "entries_s", "exits_s",
+        "entries_g_base", "exits_g_base", "entries_s_base", "exits_s_base",
         "entries_g_notional", "exits_g_notional", "entries_s_notional", "exits_s_notional",
+        "entries_g_base_notional", "exits_g_base_notional", "entries_s_base_notional", "exits_s_base_notional",
         "entries_g_pnl", "exits_g_pnl", "entries_s_pnl", "exits_s_pnl",
+        "entries_g_base_pnl", "exits_g_base_pnl", "entries_s_base_pnl", "exits_s_base_pnl",
         "edges_g", "edges_g_notional", "edges_g_pnl",
         "edges_s", "edges_s_notional", "edges_s_pnl",
     ]
@@ -547,10 +638,16 @@ else:
 
     entries_g = merged["entries_g"]; exits_g = merged["exits_g"]
     entries_s = merged["entries_s"]; exits_s = merged["exits_s"]
+    entries_g_base = merged["entries_g_base"]; exits_g_base = merged["exits_g_base"]
+    entries_s_base = merged["entries_s_base"]; exits_s_base = merged["exits_s_base"]
     entries_g_notional = merged["entries_g_notional"]; exits_g_notional = merged["exits_g_notional"]
     entries_s_notional = merged["entries_s_notional"]; exits_s_notional = merged["exits_s_notional"]
+    entries_g_base_notional = merged["entries_g_base_notional"]; exits_g_base_notional = merged["exits_g_base_notional"]
+    entries_s_base_notional = merged["entries_s_base_notional"]; exits_s_base_notional = merged["exits_s_base_notional"]
     entries_g_pnl = merged["entries_g_pnl"]; exits_g_pnl = merged["exits_g_pnl"]
     entries_s_pnl = merged["entries_s_pnl"]; exits_s_pnl = merged["exits_s_pnl"]
+    entries_g_base_pnl = merged["entries_g_base_pnl"]; exits_g_base_pnl = merged["exits_g_base_pnl"]
+    entries_s_base_pnl = merged["entries_s_base_pnl"]; exits_s_base_pnl = merged["exits_s_base_pnl"]
     edges_g = merged["edges_g"]; edges_g_notional = merged["edges_g_notional"]; edges_g_pnl = merged["edges_g_pnl"]
     edges_s = merged["edges_s"]; edges_s_notional = merged["edges_s_notional"]; edges_s_pnl = merged["edges_s_pnl"]
 
@@ -564,25 +661,25 @@ else:
         return list(vals), list(ws)
 
     hists = []
-    def add_hist(key, title, data, weights=None):
-        h = summarize_hist(data, key, title, weights=weights)
+    def add_hist(key, title, data, weights=None, baseline_data=None, baseline_weights=None):
+        h = summarize_hist(data, key, title, weights=weights, baseline_data=baseline_data, baseline_weights=baseline_weights)
         if h is not None:
             hists.append(h)
 
-    add_hist('entries_g', f'全体交易 EntryRank (Tα={T_GLOBAL}分钟, 5min行情, 全量)', entries_g)
-    add_hist('exits_g', f'全体交易 ExitRank (Tα={T_GLOBAL}分钟, 5min行情, 全量)', exits_g)
-    add_hist('entries_s', f'超短单 EntryRank (持仓<=10分钟, Tα={T_SHORT}分钟, 5min行情)', entries_s)
-    add_hist('exits_s', f'超短单 ExitRank (持仓<=10分钟, Tα={T_SHORT}分钟, 5min行情)', exits_s)
+    add_hist('entries_g', f'全体交易 EntryRank (Tα={T_GLOBAL}分钟, 5min行情, 全量)', entries_g, baseline_data=entries_g_base)
+    add_hist('exits_g', f'全体交易 ExitRank (Tα={T_GLOBAL}分钟, 5min行情, 全量)', exits_g, baseline_data=exits_g_base)
+    add_hist('entries_s', f'超短单 EntryRank (持仓<=10分钟, Tα={T_SHORT}分钟, 5min行情)', entries_s, baseline_data=entries_s_base)
+    add_hist('exits_s', f'超短单 ExitRank (持仓<=10分钟, Tα={T_SHORT}分钟, 5min行情)', exits_s, baseline_data=exits_s_base)
 
-    ev, ew = unpack_weighted(entries_g_notional); add_hist('entries_g_notional', '全体交易 EntryRank（成交金额加权）', ev, ew)
-    xv, xw = unpack_weighted(exits_g_notional); add_hist('exits_g_notional', '全体交易 ExitRank（成交金额加权）', xv, xw)
-    evp, ewp = unpack_weighted(entries_g_pnl); add_hist('entries_g_pnl', '全体交易 EntryRank（PnL加权，盈利部分）', evp, ewp)
-    xvp, xwp = unpack_weighted(exits_g_pnl); add_hist('exits_g_pnl', '全体交易 ExitRank（PnL加权，盈利部分）', xvp, xwp)
+    ev, ew = unpack_weighted(entries_g_notional); evb, ewb = unpack_weighted(entries_g_base_notional); add_hist('entries_g_notional', '全体交易 EntryRank（成交金额加权）', ev, weights=ew, baseline_data=evb, baseline_weights=ewb)
+    xv, xw = unpack_weighted(exits_g_notional); xvb, xwb = unpack_weighted(exits_g_base_notional); add_hist('exits_g_notional', '全体交易 ExitRank（成交金额加权）', xv, weights=xw, baseline_data=xvb, baseline_weights=xwb)
+    evp, ewp = unpack_weighted(entries_g_pnl); evpb, ewpb = unpack_weighted(entries_g_base_pnl); add_hist('entries_g_pnl', '全体交易 EntryRank（PnL加权，盈利部分）', evp, weights=ewp, baseline_data=evpb, baseline_weights=ewpb)
+    xvp, xwp = unpack_weighted(exits_g_pnl); xvpb, xwpb = unpack_weighted(exits_g_base_pnl); add_hist('exits_g_pnl', '全体交易 ExitRank（PnL加权，盈利部分）', xvp, weights=xwp, baseline_data=xvpb, baseline_weights=xwpb)
 
-    evs, ews = unpack_weighted(entries_s_notional); add_hist('entries_s_notional', '超短单 EntryRank（成交金额加权）', evs, ews)
-    xvs, xws = unpack_weighted(exits_s_notional); add_hist('exits_s_notional', '超短单 ExitRank（成交金额加权）', xvs, xws)
-    evsp, ewsp = unpack_weighted(entries_s_pnl); add_hist('entries_s_pnl', '超短单 EntryRank（PnL加权，盈利部分）', evsp, ewsp)
-    xvsp, xwsp = unpack_weighted(exits_s_pnl); add_hist('exits_s_pnl', '超短单 ExitRank（PnL加权，盈利部分）', xvsp, xwsp)
+    evs, ews = unpack_weighted(entries_s_notional); evsb, ewsb = unpack_weighted(entries_s_base_notional); add_hist('entries_s_notional', '超短单 EntryRank（成交金额加权）', evs, weights=ews, baseline_data=evsb, baseline_weights=ewsb)
+    xvs, xws = unpack_weighted(exits_s_notional); xvbs, xwbs = unpack_weighted(exits_s_base_notional); add_hist('exits_s_notional', '超短单 ExitRank（成交金额加权）', xvs, weights=xws, baseline_data=xvbs, baseline_weights=xwbs)
+    evsp, ewsp = unpack_weighted(entries_s_pnl); evspb, ewspb = unpack_weighted(entries_s_base_pnl); add_hist('entries_s_pnl', '超短单 EntryRank（PnL加权，盈利部分）', evsp, weights=ewsp, baseline_data=evspb, baseline_weights=ewspb)
+    xvsp, xwsp = unpack_weighted(exits_s_pnl); xvspb, xwspb = unpack_weighted(exits_s_base_pnl); add_hist('exits_s_pnl', '超短单 ExitRank（PnL加权，盈利部分）', xvsp, weights=xwsp, baseline_data=xvspb, baseline_weights=xwspb)
 
     add_hist('edge_g', '全体交易 Edge 捕获率（笔数）', edges_g)
     ev_edge, ew_edge = unpack_weighted(edges_g_notional); add_hist('edge_g_notional', '全体交易 Edge 捕获率（成交金额加权）', ev_edge, ew_edge)
@@ -940,7 +1037,7 @@ html_template = r"""<!DOCTYPE html>
             <div class="text-slate-700 text-sm leading-relaxed space-y-3">
                 <p>核心指标 <strong>Entry Rank</strong>（开仓择时得分）与 <strong>Exit Rank</strong>（平仓择时得分）使用统一窗口与极值位置计算：</p>
                 <ul class="list-disc pl-5 space-y-3">
-                  <li><strong>时间窗口（入场/出场分开评估）</strong>：Entry 窗口 \([t_{\text{open}},\, t_{\text{close}}]\)，Exit 窗口 \([t_{\text{open}},\, t_{\text{close}} + 0.5\,T_{\alpha}]\)；\(t_{\text{open}}/t_{\text{close}}\) 为开/平仓时间，\(T_{\alpha}\) 取自持仓时长分位数（全体 \(=__T_GLOBAL__\,\text{min}\)，超短 \(=__T_SHORT__\,\text{min}\)），并在同一标的上按 \(\text{prev\_close}\)、\(\text{next\_open}\) 做边界裁剪。</li>
+                  <li><strong>时间窗口（入场/出场分开评估）</strong>：Entry 窗口 \([t_{\text{open}},\, t_{\text{close}}]\)，Exit 窗口 \([t_{\text{open}},\, t_{\text{close}} + 0.5\,T_{\alpha}]\)；\(t_{\text{open}}/t_{\text{close}}\) 为开/平仓时间，\(T_{\alpha}\) 取自持仓时长分位数（全体 \(=__T_GLOBAL__\,\text{min}\)，超短 \(=__T_SHORT__\,\text{min}\)），同一标的按前一笔平仓时刻（prev_close）与下一笔开仓时刻（next_open）裁剪窗口，避免跨越相邻持仓。</li>
                   <li><strong>Rank 公式（多头）</strong>：
                     <div class="math-block">$$
                     \begin{aligned}
@@ -963,7 +1060,7 @@ html_template = r"""<!DOCTYPE html>
                     $$</div>
                     空头镜像后裁剪到 \([0,1]\)，衡量吃到的波动占比。
                   </li>
-                  <li><strong>加权视角</strong>：直方图支持笔数、成交金额、PnL（仅盈利部分）三种权重，按钮切换；叠加随机均匀分布基准线（1/桶数）与中位数虚线，便于对照是否优于随机择时。</li>
+                  <li><strong>加权视角</strong>：直方图支持笔数、成交金额、PnL（仅盈利部分）三种权重，按钮切换；基准线优先使用<strong>经验基准</strong>（在同一窗口随机抽取一根 5 分钟 K 线，并在其 High/Low 间随机取价计算 Rank，累积成分布），若样本不足则回退为均匀基准 \(1/\text{bins}\)；同时叠加中位数虚线，便于对照是否优于随机择时。</li>
                   <li><strong>行情口径</strong>：全部使用 5 分钟 K 线提取窗口内的 High/Low 极值，空头已镜像为“买低卖高”方向以便可比。</li>
                 </ul>
             </div>
