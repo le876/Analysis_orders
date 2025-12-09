@@ -6,14 +6,15 @@
                 <meta name="viewport" content="width=device-width, initial-scale=1" />
                 <title>成交率分布</title>
                 <script src="https://cdn.plot.ly/plotly-latest.min.js"></script>
+                <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+                <script src="https://cdn.tailwindcss.com"></script>
+                <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
                 <style>
-                    body { font-family: Arial, sans-serif; margin: 20px; }
-                    h1 { margin: 0 0 15px 0; font-size: 22px; }
-                    .card { background: #fff; padding: 16px; border-radius: 10px; box-shadow: 0 2px 8px rgba(0,0,0,0.06); }
-                    .chart-container { margin-bottom: 20px; }
-                    .metrics-section { margin-top: 15px; }
-                    .explain { margin-top: 14px; color: #444; line-height: 1.7; }
-                    table td, table th { border-bottom: 1px solid #eee; padding: 8px; }
+                    body { font-family: "Noto Sans SC","Microsoft YaHei","Segoe UI",sans-serif; }
+                    .markdown-body h3 { font-size: 1.05rem; margin-top: 1rem; margin-bottom: .45rem; }
+                    .markdown-body p { margin: .35rem 0; color: #374151; line-height: 1.65; }
+                    .markdown-body ul { margin: .25rem 0 .5rem 1.2rem; color: #374151; line-height: 1.6; list-style: disc; }
+                    .markdown-body li { margin: .2rem 0; }
                 </style>
                 <script>
                     window.MathJax = {
@@ -26,76 +27,74 @@
                         svg: { fontCache: 'global' }
                     };
                 </script>
-                <script id="MathJax-script" async src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-chtml-full.js" onerror="this.onerror=null; this.src='assets/mathjax/tex-chtml-full.js';"></script>
+                <script id="MathJax-script" async src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-chtml-full.js" onerror="this.onerror=null; this.src='../assets/mathjax/tex-chtml-full.js';"></script>
             </head>
-            <body>
-                <div class="card" id="page-root"> 
-                    <h1>成交率分布</h1>
-                    <div class="chart-container">
-                        
-                <div id="fill_rate_distribution_light" class="plotly-graph-div" style="height:400px; width:100%;"></div>
-                <script type="text/javascript">
-                    window.PLOTLYENV=window.PLOTLYENV || {};
-                    (function() {
-                        var fig = {"data": [{"hovertemplate": "区间: %{text}<br>频次: %{y:,}<extra></extra>", "marker": {"color": "lightgreen", "line": {"color": "#27ae60", "width": 0.5}}, "name": "成交率分布", "opacity": 0.85, "text": ["0.0% - 4.0%", "4.0% - 8.0%", "8.0% - 12.0%", "12.0% - 16.0%", "16.0% - 20.0%", "20.0% - 24.0%", "24.0% - 28.0%", "28.0% - 32.0%", "32.0% - 36.0%", "36.0% - 40.0%", "40.0% - 44.0%", "44.0% - 48.0%", "48.0% - 52.0%", "52.0% - 56.0%", "56.0% - 60.0%", "60.0% - 64.0%", "64.0% - 68.0%", "68.0% - 72.0%", "72.0% - 76.0%", "76.0% - 80.0%", "80.0% - 84.0%", "84.0% - 88.0%", "88.0% - 92.0%", "92.0% - 96.0%", "96.0% - 100.0%"], "width": [4.0, 4.0, 4.0, 4.0, 4.0, 4.0, 4.0, 4.0, 4.0, 4.0, 4.0, 4.0, 4.0, 4.0, 4.0, 4.0, 4.0, 4.0, 4.0, 4.0, 4.0, 4.0, 4.0, 4.0, 4.0], "x": [2.0, 6.0, 10.0, 14.0, 18.0, 22.0, 26.0, 30.0, 34.0, 38.0, 42.0, 46.0, 50.0, 54.0, 58.0, 62.0, 66.0, 70.0, 74.0, 78.0, 82.0, 86.0, 90.0, 94.0, 98.0], "y": [3040176, 20685, 22124, 21611, 17906, 23189, 22975, 14571, 26889, 10578, 19038, 10401, 37095, 9562, 8872, 14833, 21434, 9434, 13264, 6430, 15021, 8818, 8008, 5689, 5060705], "type": "bar"}], "layout": {"template": {"data": {"histogram2dcontour": [{"type": "histogram2dcontour", "colorbar": {"outlinewidth": 0, "ticks": ""}, "colorscale": [[0.0, "#0d0887"], [0.1111111111111111, "#46039f"], [0.2222222222222222, "#7201a8"], [0.3333333333333333, "#9c179e"], [0.4444444444444444, "#bd3786"], [0.5555555555555556, "#d8576b"], [0.6666666666666666, "#ed7953"], [0.7777777777777778, "#fb9f3a"], [0.8888888888888888, "#fdca26"], [1.0, "#f0f921"]]}], "choropleth": [{"type": "choropleth", "colorbar": {"outlinewidth": 0, "ticks": ""}}], "histogram2d": [{"type": "histogram2d", "colorbar": {"outlinewidth": 0, "ticks": ""}, "colorscale": [[0.0, "#0d0887"], [0.1111111111111111, "#46039f"], [0.2222222222222222, "#7201a8"], [0.3333333333333333, "#9c179e"], [0.4444444444444444, "#bd3786"], [0.5555555555555556, "#d8576b"], [0.6666666666666666, "#ed7953"], [0.7777777777777778, "#fb9f3a"], [0.8888888888888888, "#fdca26"], [1.0, "#f0f921"]]}], "heatmap": [{"type": "heatmap", "colorbar": {"outlinewidth": 0, "ticks": ""}, "colorscale": [[0.0, "#0d0887"], [0.1111111111111111, "#46039f"], [0.2222222222222222, "#7201a8"], [0.3333333333333333, "#9c179e"], [0.4444444444444444, "#bd3786"], [0.5555555555555556, "#d8576b"], [0.6666666666666666, "#ed7953"], [0.7777777777777778, "#fb9f3a"], [0.8888888888888888, "#fdca26"], [1.0, "#f0f921"]]}], "contourcarpet": [{"type": "contourcarpet", "colorbar": {"outlinewidth": 0, "ticks": ""}}], "contour": [{"type": "contour", "colorbar": {"outlinewidth": 0, "ticks": ""}, "colorscale": [[0.0, "#0d0887"], [0.1111111111111111, "#46039f"], [0.2222222222222222, "#7201a8"], [0.3333333333333333, "#9c179e"], [0.4444444444444444, "#bd3786"], [0.5555555555555556, "#d8576b"], [0.6666666666666666, "#ed7953"], [0.7777777777777778, "#fb9f3a"], [0.8888888888888888, "#fdca26"], [1.0, "#f0f921"]]}], "surface": [{"type": "surface", "colorbar": {"outlinewidth": 0, "ticks": ""}, "colorscale": [[0.0, "#0d0887"], [0.1111111111111111, "#46039f"], [0.2222222222222222, "#7201a8"], [0.3333333333333333, "#9c179e"], [0.4444444444444444, "#bd3786"], [0.5555555555555556, "#d8576b"], [0.6666666666666666, "#ed7953"], [0.7777777777777778, "#fb9f3a"], [0.8888888888888888, "#fdca26"], [1.0, "#f0f921"]]}], "mesh3d": [{"type": "mesh3d", "colorbar": {"outlinewidth": 0, "ticks": ""}}], "scatter": [{"fillpattern": {"fillmode": "overlay", "size": 10, "solidity": 0.2}, "type": "scatter"}], "parcoords": [{"type": "parcoords", "line": {"colorbar": {"outlinewidth": 0, "ticks": ""}}}], "scatterpolargl": [{"type": "scatterpolargl", "marker": {"colorbar": {"outlinewidth": 0, "ticks": ""}}}], "bar": [{"error_x": {"color": "#2a3f5f"}, "error_y": {"color": "#2a3f5f"}, "marker": {"line": {"color": "#E5ECF6", "width": 0.5}, "pattern": {"fillmode": "overlay", "size": 10, "solidity": 0.2}}, "type": "bar"}], "scattergeo": [{"type": "scattergeo", "marker": {"colorbar": {"outlinewidth": 0, "ticks": ""}}}], "scatterpolar": [{"type": "scatterpolar", "marker": {"colorbar": {"outlinewidth": 0, "ticks": ""}}}], "histogram": [{"marker": {"pattern": {"fillmode": "overlay", "size": 10, "solidity": 0.2}}, "type": "histogram"}], "scattergl": [{"type": "scattergl", "marker": {"colorbar": {"outlinewidth": 0, "ticks": ""}}}], "scatter3d": [{"type": "scatter3d", "line": {"colorbar": {"outlinewidth": 0, "ticks": ""}}, "marker": {"colorbar": {"outlinewidth": 0, "ticks": ""}}}], "scattermap": [{"type": "scattermap", "marker": {"colorbar": {"outlinewidth": 0, "ticks": ""}}}], "scattermapbox": [{"type": "scattermapbox", "marker": {"colorbar": {"outlinewidth": 0, "ticks": ""}}}], "scatterternary": [{"type": "scatterternary", "marker": {"colorbar": {"outlinewidth": 0, "ticks": ""}}}], "scattercarpet": [{"type": "scattercarpet", "marker": {"colorbar": {"outlinewidth": 0, "ticks": ""}}}], "carpet": [{"aaxis": {"endlinecolor": "#2a3f5f", "gridcolor": "white", "linecolor": "white", "minorgridcolor": "white", "startlinecolor": "#2a3f5f"}, "baxis": {"endlinecolor": "#2a3f5f", "gridcolor": "white", "linecolor": "white", "minorgridcolor": "white", "startlinecolor": "#2a3f5f"}, "type": "carpet"}], "table": [{"cells": {"fill": {"color": "#EBF0F8"}, "line": {"color": "white"}}, "header": {"fill": {"color": "#C8D4E3"}, "line": {"color": "white"}}, "type": "table"}], "barpolar": [{"marker": {"line": {"color": "#E5ECF6", "width": 0.5}, "pattern": {"fillmode": "overlay", "size": 10, "solidity": 0.2}}, "type": "barpolar"}], "pie": [{"automargin": true, "type": "pie"}]}, "layout": {"autotypenumbers": "strict", "colorway": ["#636efa", "#EF553B", "#00cc96", "#ab63fa", "#FFA15A", "#19d3f3", "#FF6692", "#B6E880", "#FF97FF", "#FECB52"], "font": {"color": "#2a3f5f"}, "hovermode": "closest", "hoverlabel": {"align": "left"}, "paper_bgcolor": "white", "plot_bgcolor": "#E5ECF6", "polar": {"bgcolor": "#E5ECF6", "angularaxis": {"gridcolor": "white", "linecolor": "white", "ticks": ""}, "radialaxis": {"gridcolor": "white", "linecolor": "white", "ticks": ""}}, "ternary": {"bgcolor": "#E5ECF6", "aaxis": {"gridcolor": "white", "linecolor": "white", "ticks": ""}, "baxis": {"gridcolor": "white", "linecolor": "white", "ticks": ""}, "caxis": {"gridcolor": "white", "linecolor": "white", "ticks": ""}}, "coloraxis": {"colorbar": {"outlinewidth": 0, "ticks": ""}}, "colorscale": {"sequential": [[0.0, "#0d0887"], [0.1111111111111111, "#46039f"], [0.2222222222222222, "#7201a8"], [0.3333333333333333, "#9c179e"], [0.4444444444444444, "#bd3786"], [0.5555555555555556, "#d8576b"], [0.6666666666666666, "#ed7953"], [0.7777777777777778, "#fb9f3a"], [0.8888888888888888, "#fdca26"], [1.0, "#f0f921"]], "sequentialminus": [[0.0, "#0d0887"], [0.1111111111111111, "#46039f"], [0.2222222222222222, "#7201a8"], [0.3333333333333333, "#9c179e"], [0.4444444444444444, "#bd3786"], [0.5555555555555556, "#d8576b"], [0.6666666666666666, "#ed7953"], [0.7777777777777778, "#fb9f3a"], [0.8888888888888888, "#fdca26"], [1.0, "#f0f921"]], "diverging": [[0, "#8e0152"], [0.1, "#c51b7d"], [0.2, "#de77ae"], [0.3, "#f1b6da"], [0.4, "#fde0ef"], [0.5, "#f7f7f7"], [0.6, "#e6f5d0"], [0.7, "#b8e186"], [0.8, "#7fbc41"], [0.9, "#4d9221"], [1, "#276419"]]}, "xaxis": {"gridcolor": "white", "linecolor": "white", "ticks": "", "title": {"standoff": 15}, "zerolinecolor": "white", "automargin": true, "zerolinewidth": 2}, "yaxis": {"gridcolor": "white", "linecolor": "white", "ticks": "", "title": {"standoff": 15}, "zerolinecolor": "white", "automargin": true, "zerolinewidth": 2}, "scene": {"xaxis": {"backgroundcolor": "#E5ECF6", "gridcolor": "white", "linecolor": "white", "showbackground": true, "ticks": "", "zerolinecolor": "white", "gridwidth": 2}, "yaxis": {"backgroundcolor": "#E5ECF6", "gridcolor": "white", "linecolor": "white", "showbackground": true, "ticks": "", "zerolinecolor": "white", "gridwidth": 2}, "zaxis": {"backgroundcolor": "#E5ECF6", "gridcolor": "white", "linecolor": "white", "showbackground": true, "ticks": "", "zerolinecolor": "white", "gridwidth": 2}}, "shapedefaults": {"line": {"color": "#2a3f5f"}}, "annotationdefaults": {"arrowcolor": "#2a3f5f", "arrowhead": 0, "arrowwidth": 1}, "geo": {"bgcolor": "white", "landcolor": "#E5ECF6", "subunitcolor": "white", "showland": true, "showlakes": true, "lakecolor": "white"}, "title": {"x": 0.05}, "mapbox": {"style": "light"}}}, "title": {"text": "成交率分布图"}, "xaxis": {"title": {"text": "成交率 (%)"}}, "yaxis": {"title": {"text": "频次"}}, "height": 400}};
-                        var cfg = {"displayModeBar": false, "displaylogo": false, "modeBarButtonsToRemove": ["pan2d", "lasso2d"]};
-                        if (document.getElementById("fill_rate_distribution_light")) {
-                            Plotly.newPlot("fill_rate_distribution_light", fig.data || [], fig.layout || {}, cfg);
-                        }
-                    })();
-                </script>
-                
+            <body class="bg-gray-50">
+                <header class="sticky top-0 z-30 bg-white shadow-sm border-b border-gray-100">
+                    <div class="max-w-7xl mx-auto px-4 sm:px-6 py-3 flex items-center justify-between">
+                        <div>
+                            <p class="text-[11px] tracking-[0.18em] text-gray-500 uppercase">时段分析</p>
+                            <h1 class="text-xl font-semibold text-gray-900">成交率分布</h1>
+                        </div>
+                        <div class="text-xs text-gray-500">滚动查看完整内容</div>
                     </div>
-                    <div class="metrics-section">
+                </header>
+                <main class="max-w-7xl mx-auto px-4 sm:px-6 py-6">
+                    <div class="bg-white rounded-lg shadow-sm p-6" id="page-root">
+                        <div id="main-chart" class="mb-6">
+                            
+            <div id="fill_rate_distribution_light" class="plotly-graph-div" style="height:400px; width:100%;"></div>
+            <script type="text/javascript">
+                window.PLOTLYENV=window.PLOTLYENV || {};
+                (function() {
+                    var fig = {"data": [{"hovertemplate": "区间: %{text}<br>频次: %{y:,}<extra></extra>", "marker": {"color": "lightgreen", "line": {"color": "#27ae60", "width": 0.5}}, "name": "成交率分布", "opacity": 0.85, "text": ["0.0% - 4.0%", "4.0% - 8.0%", "8.0% - 12.0%", "12.0% - 16.0%", "16.0% - 20.0%", "20.0% - 24.0%", "24.0% - 28.0%", "28.0% - 32.0%", "32.0% - 36.0%", "36.0% - 40.0%", "40.0% - 44.0%", "44.0% - 48.0%", "48.0% - 52.0%", "52.0% - 56.0%", "56.0% - 60.0%", "60.0% - 64.0%", "64.0% - 68.0%", "68.0% - 72.0%", "72.0% - 76.0%", "76.0% - 80.0%", "80.0% - 84.0%", "84.0% - 88.0%", "88.0% - 92.0%", "92.0% - 96.0%", "96.0% - 100.0%"], "width": [4.0, 4.0, 4.0, 4.0, 4.0, 4.0, 4.0, 4.0, 4.0, 4.0, 4.0, 4.0, 4.0, 4.0, 4.0, 4.0, 4.0, 4.0, 4.0, 4.0, 4.0, 4.0, 4.0, 4.0, 4.0], "x": [2.0, 6.0, 10.0, 14.0, 18.0, 22.0, 26.0, 30.0, 34.0, 38.0, 42.0, 46.0, 50.0, 54.0, 58.0, 62.0, 66.0, 70.0, 74.0, 78.0, 82.0, 86.0, 90.0, 94.0, 98.0], "y": [3040176, 20685, 22124, 21611, 17906, 23189, 22975, 14571, 26889, 10578, 19038, 10401, 37095, 9562, 8872, 14833, 21434, 9434, 13264, 6430, 15021, 8818, 8008, 5689, 5060705], "type": "bar"}], "layout": {"template": {"data": {"histogram2dcontour": [{"type": "histogram2dcontour", "colorbar": {"outlinewidth": 0, "ticks": ""}, "colorscale": [[0.0, "#0d0887"], [0.1111111111111111, "#46039f"], [0.2222222222222222, "#7201a8"], [0.3333333333333333, "#9c179e"], [0.4444444444444444, "#bd3786"], [0.5555555555555556, "#d8576b"], [0.6666666666666666, "#ed7953"], [0.7777777777777778, "#fb9f3a"], [0.8888888888888888, "#fdca26"], [1.0, "#f0f921"]]}], "choropleth": [{"type": "choropleth", "colorbar": {"outlinewidth": 0, "ticks": ""}}], "histogram2d": [{"type": "histogram2d", "colorbar": {"outlinewidth": 0, "ticks": ""}, "colorscale": [[0.0, "#0d0887"], [0.1111111111111111, "#46039f"], [0.2222222222222222, "#7201a8"], [0.3333333333333333, "#9c179e"], [0.4444444444444444, "#bd3786"], [0.5555555555555556, "#d8576b"], [0.6666666666666666, "#ed7953"], [0.7777777777777778, "#fb9f3a"], [0.8888888888888888, "#fdca26"], [1.0, "#f0f921"]]}], "heatmap": [{"type": "heatmap", "colorbar": {"outlinewidth": 0, "ticks": ""}, "colorscale": [[0.0, "#0d0887"], [0.1111111111111111, "#46039f"], [0.2222222222222222, "#7201a8"], [0.3333333333333333, "#9c179e"], [0.4444444444444444, "#bd3786"], [0.5555555555555556, "#d8576b"], [0.6666666666666666, "#ed7953"], [0.7777777777777778, "#fb9f3a"], [0.8888888888888888, "#fdca26"], [1.0, "#f0f921"]]}], "contourcarpet": [{"type": "contourcarpet", "colorbar": {"outlinewidth": 0, "ticks": ""}}], "contour": [{"type": "contour", "colorbar": {"outlinewidth": 0, "ticks": ""}, "colorscale": [[0.0, "#0d0887"], [0.1111111111111111, "#46039f"], [0.2222222222222222, "#7201a8"], [0.3333333333333333, "#9c179e"], [0.4444444444444444, "#bd3786"], [0.5555555555555556, "#d8576b"], [0.6666666666666666, "#ed7953"], [0.7777777777777778, "#fb9f3a"], [0.8888888888888888, "#fdca26"], [1.0, "#f0f921"]]}], "surface": [{"type": "surface", "colorbar": {"outlinewidth": 0, "ticks": ""}, "colorscale": [[0.0, "#0d0887"], [0.1111111111111111, "#46039f"], [0.2222222222222222, "#7201a8"], [0.3333333333333333, "#9c179e"], [0.4444444444444444, "#bd3786"], [0.5555555555555556, "#d8576b"], [0.6666666666666666, "#ed7953"], [0.7777777777777778, "#fb9f3a"], [0.8888888888888888, "#fdca26"], [1.0, "#f0f921"]]}], "mesh3d": [{"type": "mesh3d", "colorbar": {"outlinewidth": 0, "ticks": ""}}], "scatter": [{"fillpattern": {"fillmode": "overlay", "size": 10, "solidity": 0.2}, "type": "scatter"}], "parcoords": [{"type": "parcoords", "line": {"colorbar": {"outlinewidth": 0, "ticks": ""}}}], "scatterpolargl": [{"type": "scatterpolargl", "marker": {"colorbar": {"outlinewidth": 0, "ticks": ""}}}], "bar": [{"error_x": {"color": "#2a3f5f"}, "error_y": {"color": "#2a3f5f"}, "marker": {"line": {"color": "#E5ECF6", "width": 0.5}, "pattern": {"fillmode": "overlay", "size": 10, "solidity": 0.2}}, "type": "bar"}], "scattergeo": [{"type": "scattergeo", "marker": {"colorbar": {"outlinewidth": 0, "ticks": ""}}}], "scatterpolar": [{"type": "scatterpolar", "marker": {"colorbar": {"outlinewidth": 0, "ticks": ""}}}], "histogram": [{"marker": {"pattern": {"fillmode": "overlay", "size": 10, "solidity": 0.2}}, "type": "histogram"}], "scattergl": [{"type": "scattergl", "marker": {"colorbar": {"outlinewidth": 0, "ticks": ""}}}], "scatter3d": [{"type": "scatter3d", "line": {"colorbar": {"outlinewidth": 0, "ticks": ""}}, "marker": {"colorbar": {"outlinewidth": 0, "ticks": ""}}}], "scattermap": [{"type": "scattermap", "marker": {"colorbar": {"outlinewidth": 0, "ticks": ""}}}], "scattermapbox": [{"type": "scattermapbox", "marker": {"colorbar": {"outlinewidth": 0, "ticks": ""}}}], "scatterternary": [{"type": "scatterternary", "marker": {"colorbar": {"outlinewidth": 0, "ticks": ""}}}], "scattercarpet": [{"type": "scattercarpet", "marker": {"colorbar": {"outlinewidth": 0, "ticks": ""}}}], "carpet": [{"aaxis": {"endlinecolor": "#2a3f5f", "gridcolor": "white", "linecolor": "white", "minorgridcolor": "white", "startlinecolor": "#2a3f5f"}, "baxis": {"endlinecolor": "#2a3f5f", "gridcolor": "white", "linecolor": "white", "minorgridcolor": "white", "startlinecolor": "#2a3f5f"}, "type": "carpet"}], "table": [{"cells": {"fill": {"color": "#EBF0F8"}, "line": {"color": "white"}}, "header": {"fill": {"color": "#C8D4E3"}, "line": {"color": "white"}}, "type": "table"}], "barpolar": [{"marker": {"line": {"color": "#E5ECF6", "width": 0.5}, "pattern": {"fillmode": "overlay", "size": 10, "solidity": 0.2}}, "type": "barpolar"}], "pie": [{"automargin": true, "type": "pie"}]}, "layout": {"autotypenumbers": "strict", "colorway": ["#636efa", "#EF553B", "#00cc96", "#ab63fa", "#FFA15A", "#19d3f3", "#FF6692", "#B6E880", "#FF97FF", "#FECB52"], "font": {"color": "#2a3f5f"}, "hovermode": "closest", "hoverlabel": {"align": "left"}, "paper_bgcolor": "white", "plot_bgcolor": "#E5ECF6", "polar": {"bgcolor": "#E5ECF6", "angularaxis": {"gridcolor": "white", "linecolor": "white", "ticks": ""}, "radialaxis": {"gridcolor": "white", "linecolor": "white", "ticks": ""}}, "ternary": {"bgcolor": "#E5ECF6", "aaxis": {"gridcolor": "white", "linecolor": "white", "ticks": ""}, "baxis": {"gridcolor": "white", "linecolor": "white", "ticks": ""}, "caxis": {"gridcolor": "white", "linecolor": "white", "ticks": ""}}, "coloraxis": {"colorbar": {"outlinewidth": 0, "ticks": ""}}, "colorscale": {"sequential": [[0.0, "#0d0887"], [0.1111111111111111, "#46039f"], [0.2222222222222222, "#7201a8"], [0.3333333333333333, "#9c179e"], [0.4444444444444444, "#bd3786"], [0.5555555555555556, "#d8576b"], [0.6666666666666666, "#ed7953"], [0.7777777777777778, "#fb9f3a"], [0.8888888888888888, "#fdca26"], [1.0, "#f0f921"]], "sequentialminus": [[0.0, "#0d0887"], [0.1111111111111111, "#46039f"], [0.2222222222222222, "#7201a8"], [0.3333333333333333, "#9c179e"], [0.4444444444444444, "#bd3786"], [0.5555555555555556, "#d8576b"], [0.6666666666666666, "#ed7953"], [0.7777777777777778, "#fb9f3a"], [0.8888888888888888, "#fdca26"], [1.0, "#f0f921"]], "diverging": [[0, "#8e0152"], [0.1, "#c51b7d"], [0.2, "#de77ae"], [0.3, "#f1b6da"], [0.4, "#fde0ef"], [0.5, "#f7f7f7"], [0.6, "#e6f5d0"], [0.7, "#b8e186"], [0.8, "#7fbc41"], [0.9, "#4d9221"], [1, "#276419"]]}, "xaxis": {"gridcolor": "white", "linecolor": "white", "ticks": "", "title": {"standoff": 15}, "zerolinecolor": "white", "automargin": true, "zerolinewidth": 2}, "yaxis": {"gridcolor": "white", "linecolor": "white", "ticks": "", "title": {"standoff": 15}, "zerolinecolor": "white", "automargin": true, "zerolinewidth": 2}, "scene": {"xaxis": {"backgroundcolor": "#E5ECF6", "gridcolor": "white", "linecolor": "white", "showbackground": true, "ticks": "", "zerolinecolor": "white", "gridwidth": 2}, "yaxis": {"backgroundcolor": "#E5ECF6", "gridcolor": "white", "linecolor": "white", "showbackground": true, "ticks": "", "zerolinecolor": "white", "gridwidth": 2}, "zaxis": {"backgroundcolor": "#E5ECF6", "gridcolor": "white", "linecolor": "white", "showbackground": true, "ticks": "", "zerolinecolor": "white", "gridwidth": 2}}, "shapedefaults": {"line": {"color": "#2a3f5f"}}, "annotationdefaults": {"arrowcolor": "#2a3f5f", "arrowhead": 0, "arrowwidth": 1}, "geo": {"bgcolor": "white", "landcolor": "#E5ECF6", "subunitcolor": "white", "showland": true, "showlakes": true, "lakecolor": "white"}, "title": {"x": 0.05}, "mapbox": {"style": "light"}}}, "title": {"text": "成交率分布图"}, "xaxis": {"title": {"text": "成交率 (%)"}, "showgrid": false, "zeroline": false}, "yaxis": {"title": {"text": "频次"}, "showgrid": true, "gridcolor": "#e5e7eb", "zeroline": true, "zerolinecolor": "#9ca3af"}, "height": 400, "font": {"family": "Noto Sans SC, \"Microsoft YaHei\", \"Segoe UI\", sans-serif"}, "margin": {"t": 30, "b": 40, "l": 60, "r": 20}, "hovermode": "x unified", "paper_bgcolor": "rgba(0,0,0,0)", "plot_bgcolor": "rgba(0,0,0,0)"}};
+                    var cfg = {"displayModeBar": false, "displaylogo": false, "modeBarButtonsToRemove": ["pan2d", "lasso2d"]};
+                    if (document.getElementById("fill_rate_distribution_light")) {
+                        Plotly.newPlot("fill_rate_distribution_light", fig.data || [], fig.layout || {}, cfg);
+                    }
+                })();
+            </script>
+            
+                        </div>
                         
-                <table style="width:100%;border-collapse:collapse;margin:10px 0;">
-                    <thead>
-                        <tr style="background:#f4f6f8;text-align:left;"><th style="padding:8px">指标</th><th style="padding:8px">数值</th></tr>
-                    </thead>
-                    <tbody><tr><td>样本数</td><td>8,469,308</td></tr><tr><td>最大频次</td><td>5,060,705</td></tr><tr><td>区间数量</td><td>25</td></tr></tbody>
-                </table>
-                
-                    </div>
-                    <div class="explain"><p>展示所有订单的逐笔成交率分布，用于识别长尾与极端未成交情况。</p></div>
+                <div class="mt-2 mb-4">
+                    <table class="w-full text-sm border border-gray-100 rounded-md overflow-hidden">
+                        <thead class="bg-gray-50 text-gray-500">
+                            <tr><th class="py-2 px-3 text-left">指标</th><th class="py-2 px-3 text-left">数值</th></tr>
+                        </thead>
+                        <tbody class="divide-y divide-gray-100"><tr><td class='py-2 px-3 text-gray-600'>样本数</td><td class='py-2 px-3 text-gray-900 font-medium'>8,469,308</td></tr><tr><td class='py-2 px-3 text-gray-600'>最大频次</td><td class='py-2 px-3 text-gray-900 font-medium'>5,060,705</td></tr><tr><td class='py-2 px-3 text-gray-600'>区间数量</td><td class='py-2 px-3 text-gray-900 font-medium'>25</td></tr></tbody>
+                    </table>
                 </div>
+                
+                        <div id="explain-md" class="markdown-body mt-4"></div>
+                    </div>
+                </main>
                 <script>
-                    (function ensureMathJax() {
-                        var rootEl = document.getElementById('page-root') || document.body;
-                        function typeset() {
-                            if (window.MathJax) {
-                                if (window.MathJax.typesetPromise) {
-                                    window.MathJax.typesetPromise([rootEl]).catch(function (err) {
-                                        if (window.console && window.console.warn) {
-                                            console.warn('MathJax typeset failed:', err);
-                                        }
-                                    });
-                                } else if (window.MathJax.Hub && window.MathJax.Hub.Queue) {
-                                    window.MathJax.Hub.Queue(['Typeset', window.MathJax.Hub, rootEl]);
-                                }
+                    (function ensureRender(){
+                        var mdText = "<p>展示所有订单的逐笔成交率分布，用于识别长尾与极端未成交情况。</p>";
+                        var mdTarget = document.getElementById('explain-md');
+                        if (mdTarget){
+                            if (window.marked) {
+                                mdTarget.innerHTML = marked.parse(mdText);
+                            } else {
+                                mdTarget.textContent = mdText;
                             }
                         }
-                        if (document.readyState === 'loading') {
-                            document.addEventListener('DOMContentLoaded', typeset);
-                        } else {
+                        var anchor = document.getElementById('main-chart');
+                        if (anchor) {
+                            requestAnimationFrame(function() {
+                                anchor.scrollIntoView({ behavior: 'auto', block: 'start' });
+                            });
+                        }
+                        function typeset() {
+                            if (window.MathJax && window.MathJax.typesetPromise) {
+                                window.MathJax.typesetPromise().catch(function(err){ console.warn('MathJax error:', err); });
+                            }
+                        }
+                        if (document.readyState === 'complete') {
                             typeset();
-                        }
-                        window.addEventListener('load', typeset);
-                        var mjScript = document.getElementById('MathJax-script');
-                        if (mjScript && !mjScript.hasAttribute('data-mathjax-listener')) {
-                            mjScript.addEventListener('load', typeset);
-                            mjScript.setAttribute('data-mathjax-listener', 'true');
-                        }
-                        if (!window.MathJax) {
-                            var attempts = 0;
-                            var timer = setInterval(function () {
-                                attempts += 1;
-                                if (window.MathJax) {
-                                    clearInterval(timer);
-                                    typeset();
-                                } else if (attempts > 20) {
-                                    clearInterval(timer);
-                                }
-                            }, 250);
+                        } else {
+                            window.addEventListener('load', typeset);
                         }
                     })();
                 </script>

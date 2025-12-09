@@ -1,6 +1,6 @@
 ﻿data/
 mtm_analysis_results/
-docs/
+reports/
 *.pyc
 __pycache__/
 .DS_Store
