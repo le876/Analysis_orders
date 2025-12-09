@@ -103,7 +103,8 @@ class LightweightAnalysis:
         self.benchmark_dir = Path(benchmark_dir)
         self.df = None
         self.benchmark_data = {}
-        self.reports_dir = Path("reports") / "visualization_analysis"
+        # 输出路径统一放在 docs，用于 GitHub Pages 发布
+        self.reports_dir = Path("docs")
         self.reports_dir.mkdir(parents=True, exist_ok=True)
         self.figures = []
         # 运行时缓存，避免重复加载/计算
@@ -127,7 +128,7 @@ class LightweightAnalysis:
         返回 (年化无风险利率, 来源, 数据日期)。
         优先级：
         1) 环境变量 RISK_FREE_RATE（允许 0.025 或 2.5 两种写法）
-        2) 本地缓存 reports/risk_free_cache.json（若缓存日期不晚于 target_date 则复用）
+        2) 本地缓存 docs/risk_free_cache.json（若缓存日期不晚于 target_date 则复用）
         3) 在线获取东财国债收益率表（取 EMM00166466 近似1Y，按 target_date 向前取最近一条），失败则默认2%
         """
         # 1) 环境变量
@@ -140,7 +141,7 @@ class LightweightAnalysis:
             except Exception:
                 pass
 
-        cache_path = Path("reports") / "risk_free_cache.json"
+        cache_path = self.reports_dir / "risk_free_cache.json"
         # 2) 缓存复用
         try:
             if cache_path.exists():
@@ -325,7 +326,7 @@ class LightweightAnalysis:
         
     def _ensure_mathjax_bundle(self) -> str:
         """确保本地 MathJax 资源存在，返回相对于报告目录的路径。"""
-        base_dir = Path('reports') / 'assets' / 'mathjax'
+        base_dir = self.reports_dir / 'assets' / 'mathjax'
         base_dir.mkdir(parents=True, exist_ok=True)
         local_script = base_dir / 'tex-chtml-full.js'
         if not local_script.exists():
@@ -9295,7 +9296,7 @@ class LightweightAnalysis:
                         first_day_assets_display = f"¥{first_nav:,.0f}"
                         
             # 获取首日最低所需本金快照
-            snapshot = Path('reports/first_day_capital_snapshot.json')
+            snapshot = self.reports_dir / 'first_day_capital_snapshot.json'
             if snapshot.exists():
                 data = json.loads(snapshot.read_text(encoding='utf-8'))
                 val = float(data.get('first_day_min_required_equity', float('nan')))
@@ -9332,6 +9333,9 @@ class LightweightAnalysis:
                 <!-- Header -->
                 <header class="bg-white rounded-xl shadow-sm p-8 mb-8 text-center border-t-4 border-blue-500">
                     <h1 class="text-3xl font-bold text-gray-900 mb-2"><i class='fas fa-rocket text-blue-500'></i> 量化策略分析报告</h1>
+                    <div class="text-sm text-blue-600 mb-3">
+                        <a class="underline hover:text-blue-800" href="https://github.com/le876/Analysis_orders" target="_blank" rel="noopener noreferrer">https://github.com/le876/Analysis_orders</a>
+                    </div>
                     <div class="flex justify-center items-center space-x-4 text-sm text-gray-500 mb-4">
                         <span><i class='far fa-calendar-alt text-gray-500'></i> 生成时间: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}</span>
                         <span><i class='fas fa-chart-bar text-indigo-500'></i> 数据量: {len(self.df):,} 条</span>
@@ -9523,8 +9527,7 @@ class LightweightAnalysis:
         
         # 创建现有图表的映射
         extra_figs = [
-            ('entry_exit_rank_baostock_full', 'reports/entry_exit_rank_baostock_full.html'),
-            ('entry_exit_rank_baostock_full', 'docs/entry_exit_rank_baostock_full.html'),
+            ('entry_exit_rank_baostock_full', self.reports_dir / 'entry_exit_rank_baostock_full.html'),
         ]
         for name, path in extra_figs:
             if name not in [n for n, _ in self.figures]:
@@ -9678,10 +9681,6 @@ class LightweightAnalysis:
                         });
                     })();
                 </script>
-                <footer class="text-center text-gray-400 text-sm py-8">
-                    <p><i class='fas fa-bullseye text-red-500'></i> 高效设计 · <i class='fas fa-rocket text-blue-500'></i> 快速分析 · <i class='fas fa-chart-bar text-indigo-500'></i> 专业洞察</p>
-                    <p class="mt-1">优化策略: 智能采样 + CDN加载 + 数据压缩 + Tailwind CSS</p>
-                </footer>
             </div>
         </body>
         </html>
@@ -9842,7 +9841,7 @@ class LightweightAnalysis:
             # 优先使用快照/缓存，避免重复回放首日逐笔
             init_cap_reestimated = _np.nan
             try:
-                _snap_path = _Path('reports/first_day_capital_snapshot.json')
+                _snap_path = _Path(self.reports_dir / 'first_day_capital_snapshot.json')
                 if _snap_path.exists():
                     _snap = json.loads(_snap_path.read_text(encoding='utf-8'))
                     _val = float(_snap.get('first_day_min_required_equity', float('nan')))
@@ -9974,8 +9973,8 @@ class LightweightAnalysis:
                     # 写快照供后续复用
                     try:
                         _snap_out = {'first_day_min_required_equity': float(max_required), 'first_day': str(_first_day.date())}
-                        _Path('reports').mkdir(parents=True, exist_ok=True)
-                        _Path('reports/first_day_capital_snapshot.json').write_text(json.dumps(_snap_out, ensure_ascii=False), encoding='utf-8')
+                        _Path(self.reports_dir).mkdir(parents=True, exist_ok=True)
+                        _Path(self.reports_dir / 'first_day_capital_snapshot.json').write_text(json.dumps(_snap_out, ensure_ascii=False), encoding='utf-8')
                     except Exception:
                         pass
                 else:

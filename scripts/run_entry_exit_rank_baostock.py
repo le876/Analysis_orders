@@ -7,8 +7,8 @@
 - 行情缓存: data/cache/baostock_5min/{code}.parquet（存在则复用，不再拉取）
 - 结果缓存: data/cache/entry_exit_rank_baostock_result.json（存在则直接生成页面；如算法或参数改动，请 --recompute）
 输出:
-- reports/entry_exit_rank_baostock_full.html (直方图页面)
-- reports/entry_exit_rank_baostock_full.txt  (样本计数)
+- docs/entry_exit_rank_baostock_full.html (直方图页面，用于发布)
+- docs/entry_exit_rank_baostock_full.txt  (样本计数)
 运行方式（在仓库根目录）:
 HTTP_PROXY= HTTPS_PROXY= http_proxy= https_proxy= /home/ubuntu/.conda/envs/quant_env/bin/python scripts/run_entry_exit_rank_baostock.py
 强制重算（忽略结果缓存）:
@@ -27,12 +27,9 @@ import uuid
 T_GLOBAL = 234      # 全体交易窗口（分钟）
 T_SHORT = 5         # 超短单窗口（分钟）
 PAIRS_PATH = Path('data/paired_trades_fifo.parquet')
-REPORT_HTML = Path('reports/entry_exit_rank_baostock_full.html')
-REPORT_TXT = Path('reports/entry_exit_rank_baostock_full.txt')
-COPY_HTML_TARGETS = [
-    Path('reports/visualization_analysis/entry_exit_rank_baostock_full.html'),
-    Path('docs/entry_exit_rank_baostock_full.html'),
-]
+REPORT_HTML = Path('docs/entry_exit_rank_baostock_full.html')
+REPORT_TXT = Path('docs/entry_exit_rank_baostock_full.txt')
+COPY_HTML_TARGETS = []
 CACHE_DIR = Path('data/cache/baostock_5min')
 RESULT_CACHE = Path('data/cache/entry_exit_rank_baostock_result.json')
 
@@ -975,9 +972,9 @@ html_template = r"""<!DOCTYPE html>
         <div class="pt-2 border-t border-slate-100">
             <div class="text-base font-semibold text-slate-900 mb-2">相关页面</div>
             <ul class="text-sm text-indigo-700 leading-relaxed list-disc pl-5 space-y-1">
-              <li><a class="underline hover:text-indigo-500" target="_blank" rel="noopener noreferrer" href="reports/visualization_analysis/daily_returns_comparison_light.html">日收益率对比</a></li>
-              <li><a class="underline hover:text-indigo-500" target="_blank" rel="noopener noreferrer" href="reports/visualization_analysis/pred_real_relationship_light.html">预测值与实际收益关系分析</a></li>
-              <li><a class="underline hover:text-indigo-500" target="_blank" rel="noopener noreferrer" href="reports/visualization_analysis/intraday_avg_holding_time_light.html">交易平均持仓时间</a></li>
+              <li><a class="underline hover:text-indigo-500" target="_blank" rel="noopener noreferrer" href="daily_returns_comparison_light.html">日收益率对比</a></li>
+              <li><a class="underline hover:text-indigo-500" target="_blank" rel="noopener noreferrer" href="pred_real_relationship_light.html">预测值与实际收益关系分析</a></li>
+              <li><a class="underline hover:text-indigo-500" target="_blank" rel="noopener noreferrer" href="intraday_avg_holding_time_light.html">交易平均持仓时间</a></li>
             </ul>
         </div>
       </div>
@@ -1002,6 +999,7 @@ html_text = html_template.replace("__T_GLOBAL__", str(T_GLOBAL_USE)) \
     .replace("__SAMPLE_X_S__", f"{sample_counts.get('exits_s', 0):,}") \
     .replace("__SCRIPT_BLOCK__", script_block)
 
+REPORT_HTML.parent.mkdir(parents=True, exist_ok=True)
 REPORT_HTML.write_text(html_text, encoding='utf-8')
 REPORT_TXT.write_text(
     f'global_entry={sample_counts.get("entries_g",0)}, global_exit={sample_counts.get("exits_g",0)}, short_entry={sample_counts.get("entries_s",0)}, short_exit={sample_counts.get("exits_s",0)}\n',
